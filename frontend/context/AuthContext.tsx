@@ -1,10 +1,25 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+
+type MockUser = {
+  id: string;
+  email: string;
+  user_metadata: {
+    full_name?: string;
+  };
+};
+
+type MockSession = {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  expires_at: number;
+  token_type: string;
+  user: MockUser;
+};
 
 interface AuthState {
-  session: Session | null;
-  user: User | null;
+  session: MockSession | null;
+  user: MockUser | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -16,22 +31,9 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 function createTestSession(email: string, fullName?: string) {
   const user = {
     id: 'test-user',
-    aud: 'authenticated',
-    role: 'authenticated',
     email,
-    email_confirmed_at: new Date().toISOString(),
-    phone: '',
-    confirmation_sent_at: null,
-    confirmed_at: new Date().toISOString(),
-    recovery_sent_at: null,
-    last_sign_in_at: new Date().toISOString(),
-    app_metadata: {},
     user_metadata: fullName ? { full_name: fullName } : {},
-    identities: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    is_anonymous: false,
-  } as User;
+  } satisfies MockUser;
 
   return {
     access_token: 'test-access-token',
@@ -40,28 +42,18 @@ function createTestSession(email: string, fullName?: string) {
     expires_at: Math.floor(Date.now() / 1000) + 3600,
     token_type: 'bearer',
     user,
-  } as Session;
+  } satisfies MockSession;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<MockSession | null>(null);
+  const [user, setUser] = useState<MockUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    setSession(null);
+    setUser(null);
+    setLoading(false);
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
@@ -83,7 +75,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     setSession(null);
     setUser(null);
-    await supabase.auth.signOut();
   };
 
   return (
