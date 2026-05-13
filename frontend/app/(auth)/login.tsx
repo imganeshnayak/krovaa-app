@@ -1,20 +1,19 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Link } from 'expo-router';
-import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import { mockSignIn } from '@/lib/mockAuth';
 
 export default function LoginScreen() {
-  const { signIn, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
     setError(null);
-    const { error } = await signIn(email, password);
+    const { error } = await mockSignIn(email, password);
     if (error) setError(error);
   };
 
@@ -25,11 +24,17 @@ export default function LoginScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
+          {/* Logo Mark */}
+          <View style={styles.logoWrapper}>
             <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>G</Text>
+              <Text style={styles.logoInitial}>K</Text>
             </View>
+            <Text style={styles.logoBrand}>krovaa</Text>
           </View>
+
+          {/* Divider */}
+          <View style={styles.divider} />
+
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
         </View>
@@ -57,7 +62,7 @@ export default function LoginScreen() {
           <TouchableOpacity style={styles.forgotPassword}>
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
-          <Button title="Sign In" onPress={handleLogin} loading={loading} />
+          <Button title="Sign In" onPress={handleLogin} loading={false} />
         </View>
 
         <View style={styles.footer}>
@@ -81,40 +86,65 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: Spacing.lg,
-    paddingTop: 80,
+    paddingTop: 56,
     paddingBottom: Spacing.xl,
   },
+
+  // ── Logo Section ──────────────────────────────────────────
   header: {
     alignItems: 'center',
     marginBottom: Spacing.xxl,
   },
-  logoContainer: {
+  logoWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     marginBottom: Spacing.lg,
   },
   logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: BorderRadius.xl,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logoText: {
-    fontSize: FontSizes.xxxl,
+  logoInitial: {
+    fontSize: 22,
     fontWeight: FontWeights.extraBold as any,
     color: Colors.white,
+    letterSpacing: -0.5,
   },
+  logoBrand: {
+    fontSize: 28,
+    fontWeight: FontWeights.extraBold as any,
+    color: Colors.gray900,
+    letterSpacing: -1,
+  },
+  divider: {
+    width: 32,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: Colors.primary,
+    marginBottom: Spacing.lg,
+    opacity: 0.25,
+  },
+
+  // ── Heading ───────────────────────────────────────────────
   title: {
     fontSize: FontSizes.xxxl,
     fontWeight: FontWeights.extraBold as any,
     color: Colors.gray900,
     marginBottom: Spacing.xs,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: FontSizes.md,
     color: Colors.gray600,
     fontWeight: FontWeights.regular as any,
   },
+
+  // ── Form ─────────────────────────────────────────────────
   form: {
     marginBottom: Spacing.xl,
   },
@@ -138,6 +168,8 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.medium as any,
   },
+
+  // ── Footer ────────────────────────────────────────────────
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
