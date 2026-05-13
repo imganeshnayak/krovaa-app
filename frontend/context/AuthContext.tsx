@@ -1,10 +1,25 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+
+interface AuthUser {
+  id: string;
+  email: string;
+  user_metadata?: {
+    full_name?: string;
+  };
+}
+
+interface AuthSession {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  expires_at: number;
+  token_type: string;
+  user: AuthUser;
+}
 
 interface AuthState {
-  session: Session | null;
-  user: User | null;
+  session: AuthSession | null;
+  user: AuthUser | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -13,59 +28,34 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-function createTestSession(email: string, fullName?: string) {
-  const user = {
-    id: 'test-user',
-    aud: 'authenticated',
-    role: 'authenticated',
+function createLocalSession(email: string, fullName?: string) {
+  const user: AuthUser = {
+    id: 'local-user',
     email,
-    email_confirmed_at: new Date().toISOString(),
-    phone: '',
-    confirmation_sent_at: null,
-    confirmed_at: new Date().toISOString(),
-    recovery_sent_at: null,
-    last_sign_in_at: new Date().toISOString(),
-    app_metadata: {},
     user_metadata: fullName ? { full_name: fullName } : {},
-    identities: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    is_anonymous: false,
-  } as User;
+  };
 
   return {
-    access_token: 'test-access-token',
-    refresh_token: 'test-refresh-token',
+    access_token: 'local-access-token',
+    refresh_token: 'local-refresh-token',
     expires_in: 3600,
     expires_at: Math.floor(Date.now() / 1000) + 3600,
     token_type: 'bearer',
     user,
-  } as Session;
+  } as AuthSession;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    setLoading(false);
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const session = createTestSession(email, fullName);
+    const session = createLocalSession(email, fullName);
     setSession(session);
     setUser(session.user);
     setLoading(false);
@@ -73,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    const session = createTestSession(email);
+    const session = createLocalSession(email);
     setSession(session);
     setUser(session.user);
     setLoading(false);
@@ -83,7 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     setSession(null);
     setUser(null);
-    await supabase.auth.signOut();
   };
 
   return (

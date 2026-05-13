@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Link } from 'expo-router';
-import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import { mockSignUp } from '@/lib/mockAuth';
 
 export default function RegisterScreen() {
-  const { signUp, loading } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,7 +14,7 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     setError(null);
-    const { error } = await signUp(email, password, fullName);
+    const { error } = await mockSignUp(email, password, fullName);
     if (error) setError(error);
   };
 
@@ -26,11 +25,17 @@ export default function RegisterScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
+          {/* Logo Mark */}
+          <View style={styles.logoWrapper}>
             <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>G</Text>
+              <Text style={styles.logoInitial}>K</Text>
             </View>
+            <Text style={styles.logoBrand}>krovaa</Text>
           </View>
+
+          {/* Divider */}
+          <View style={styles.divider} />
+
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Join the community today</Text>
         </View>
@@ -62,7 +67,7 @@ export default function RegisterScreen() {
             onChangeText={setPassword}
             secureTextEntry
           />
-          <Button title="Create Account" onPress={handleRegister} loading={loading} />
+          <Button title="Create Account" onPress={handleRegister} loading={false} />
         </View>
 
         <View style={styles.footer}>
@@ -86,40 +91,65 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: Spacing.lg,
-    paddingTop: 60,
+    paddingTop: 56,
     paddingBottom: Spacing.xl,
   },
+
+  // ── Logo Section ──────────────────────────────────────────
   header: {
     alignItems: 'center',
     marginBottom: Spacing.xxl,
   },
-  logoContainer: {
+  logoWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     marginBottom: Spacing.lg,
   },
   logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: BorderRadius.xl,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logoText: {
-    fontSize: FontSizes.xxxl,
+  logoInitial: {
+    fontSize: 22,
     fontWeight: FontWeights.extraBold as any,
     color: Colors.white,
+    letterSpacing: -0.5,
   },
+  logoBrand: {
+    fontSize: 28,
+    fontWeight: FontWeights.extraBold as any,
+    color: Colors.gray900,
+    letterSpacing: -1,
+  },
+  divider: {
+    width: 32,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: Colors.primary,
+    marginBottom: Spacing.lg,
+    opacity: 0.25,
+  },
+
+  // ── Heading ───────────────────────────────────────────────
   title: {
     fontSize: FontSizes.xxxl,
     fontWeight: FontWeights.extraBold as any,
     color: Colors.gray900,
     marginBottom: Spacing.xs,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: FontSizes.md,
     color: Colors.gray600,
     fontWeight: FontWeights.regular as any,
   },
+
+  // ── Form ─────────────────────────────────────────────────
   form: {
     marginBottom: Spacing.xl,
   },
@@ -134,6 +164,8 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.medium as any,
   },
+
+  // ── Footer ────────────────────────────────────────────────
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
