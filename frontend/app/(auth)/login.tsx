@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, TextInput } from 'react-native';
 import { Link, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
@@ -11,6 +12,7 @@ export default function LoginScreen() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,15 +20,17 @@ export default function LoginScreen() {
     setError(null);
     setLoading(true);
 
-    const { error } = await signIn(email.trim(), password);
-    setLoading(false);
+    try {
+      const { error } = await signIn(email, password);
+      if (error) {
+        setError(error);
+        return;
+      }
 
-    if (error) {
-      setError(error);
-      return;
+      router.replace('/(tabs)');
+    } finally {
+      setLoading(false);
     }
-
-    router.replace('/(tabs)');
   };
 
   return (
@@ -57,6 +61,7 @@ export default function LoginScreen() {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
+
           <Input
             label="Email"
             placeholder="Enter your email"
@@ -64,13 +69,35 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
           />
-          <Input
-            label="Password"
-            placeholder="Enter your password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+
+          {/* Password Field with Eye Toggle */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Password</Text>
+            <View style={styles.passwordWrapper}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor={Colors.gray400 ?? '#9CA3AF'}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword((prev) => !prev)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color={Colors.gray500 ?? '#6B7280'}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <TouchableOpacity style={styles.forgotPassword}>
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
@@ -171,8 +198,43 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.medium as any,
   },
+
+  // ── Password with Eye ─────────────────────────────────────
+  inputGroup: {
+    marginBottom: Spacing.sm,
+  },
+  inputLabel: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.medium as any,
+    color: Colors.gray700 ?? '#374151',
+    marginBottom: 6,
+  },
+  passwordWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.gray300 ?? '#D1D5DB',
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.md,
+  },
+  passwordInput: {
+    flex: 1,
+    height: 48,
+    fontSize: FontSizes.md,
+    color: Colors.gray900,
+    paddingRight: Spacing.sm,
+  },
+  eyeButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ── Forgot Password ───────────────────────────────────────
   forgotPassword: {
     alignSelf: 'flex-end',
+    marginTop: Spacing.xs,
     marginBottom: Spacing.lg,
   },
   forgotPasswordText: {
