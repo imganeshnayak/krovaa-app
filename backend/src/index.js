@@ -3,18 +3,21 @@ import express from 'express';
 import cors from 'cors';
 import connectDB from './config/db.js';
 import authRoutes from './routes/auth.js';
+import profileRoutes from './routes/profile.js';
 
 const app = express();
 const port = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/profile', profileRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

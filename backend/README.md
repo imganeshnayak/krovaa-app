@@ -32,4 +32,16 @@ npm run dev
 - `POST /api/auth/register/send-otp` with `email`, `password`, `retypePassword`
 - `POST /api/auth/register/verify-otp` with `email`, `otp`
 - `POST /api/auth/login` with `email`, `password`
+
+## Profile endpoints
+
+- `GET /api/profile` - Get current user profile (requires Authorization header with JWT token)
+- `GET /api/profile/:userId` - Get user profile by ID (public)
+- `PUT /api/profile` - Update user profile (requires Authorization header with JWT token)
+  - Request body: `{ fullName?, location?, bio?, avatar?, skills? }`
+- `PUT /api/profile/stats` - Update user stats (requires Authorization header with JWT token)
+  - Request body: `{ jobsDone?, reviews?, earned? }`
+
+## Health check
+
 - `GET /health`
