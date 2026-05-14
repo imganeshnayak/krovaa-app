@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loginUser, registerUser } from '@/lib/authApi';
 
 interface AuthUser {
@@ -28,16 +29,22 @@ interface AuthState {
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_STORAGE_KEY = 'krovaa.auth.session';
 
 function createSession(token: string, user: AuthUser): AuthSession {
   return {
     access_token: token,
     refresh_token: token,
-    expires_in: 60 * 60 * 24 * 7,
-    expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
+    expires_in: SESSION_TTL_MS / 1000,
+    expires_at: Math.floor((Date.now() + SESSION_TTL_MS) / 1000),
     token_type: 'bearer',
     user,
   };
+}
+
+function isSessionValid(session: AuthSession) {
+  return session.expires_at > Math.floor(Date.now() / 1000);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -46,13 +53,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(false);
+    let isMounted = true;
+
+    async function restoreSession() {
+      try {
+        const storedSession = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
+        if (!storedSession) {
+          return;
+        }
+
+        const parsedSession = JSON.parse(storedSession) as AuthSession;
+        if (!isSessionValid(parsedSession)) {
+          await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+          return;
+        }
+
+        if (isMounted) {
+          setSession(parsedSession);
+          setUser(parsedSession.user);
+        }
+      } catch {
+        await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    restoreSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const setAuthState = (token: string, authUser: AuthUser) => {
+  const persistSession = async (nextSession: AuthSession | null) => {
+    if (!nextSession) {
+      await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+      return;
+    }
+
+    await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+  };
+
+  const setAuthState = async (token: string, authUser: AuthUser) => {
     const nextSession = createSession(token, authUser);
     setSession(nextSession);
     setUser(authUser);
+    await persistSession(nextSession);
   };
 
   const signUp = async (email: string, password: string, retypePassword: string) => {
@@ -62,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error };
       }
 
-      setAuthState(data.token, data.user);
+      await setAuthState(data.token, data.user);
       return { error: null };
     } catch (err) {
       return { error: err instanceof Error ? err.message : 'Unable to create account.' };
@@ -76,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error };
       }
 
-      setAuthState(data.token, data.user);
+      await setAuthState(data.token, data.user);
       return { error: null };
     } catch (err) {
       return { error: err instanceof Error ? err.message : 'Unable to sign in.' };
@@ -86,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     setSession(null);
     setUser(null);
+    await persistSession(null);
   };
 
   return (
