@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Modal, TextInput } from 'react-native';
-import { Star, MapPin, Edit3, ChevronRight, Shield, Award, Briefcase, X } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
+import { Star, MapPin, Edit3, ChevronRight, Shield, Award, Briefcase, X, Video as VideoIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { ResizeMode, Video } from 'expo-av';
 import { useAuth } from '@/context/AuthContext';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 import { getCurrentUserProfile, UserProfile, updateUserProfile, uploadProfilePhoto } from '@/lib/profileApi';
+import { createMyPost, deleteMyPost, getMyPosts, MyPost, updateMyPostCaption } from '@/lib/postsApi';
 import { Button } from '@/components/Button';
 
 const MENU_ITEMS = [
@@ -33,9 +35,22 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPostModal, setShowPostModal] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postUploading, setPostUploading] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [postsError, setPostsError] = useState<string | null>(null);
+  const [postError, setPostError] = useState<string | null>(null);
+  const [posts, setPosts] = useState<MyPost[]>([]);
+
+  const [postForm, setPostForm] = useState({
+    caption: '',
+    mediaItems: [] as Array<{ uri: string; mimeType: string }>,
+  });
 
   const [editForm, setEditForm] = useState({
     fullName: '',
@@ -87,6 +102,44 @@ export default function ProfileScreen() {
     };
   }, [session?.access_token]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchPosts() {
+      if (!session?.access_token) {
+        if (isMounted) {
+          setPostsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const { data, error: fetchError } = await getMyPosts(session.access_token);
+        if (!isMounted) return;
+
+        if (fetchError) {
+          setPostsError(fetchError);
+        } else if (data) {
+          setPosts(data.posts);
+        }
+      } catch {
+        if (isMounted) {
+          setPostsError('Failed to load posts');
+        }
+      } finally {
+        if (isMounted) {
+          setPostsLoading(false);
+        }
+      }
+    }
+
+    fetchPosts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.access_token]);
+
   const handleOpenEditModal = () => {
     if (profile) {
       setEditForm({
@@ -121,6 +174,30 @@ export default function ProfileScreen() {
       avatar: '',
     });
     setEditError(null);
+  };
+
+  const handleOpenPostModal = () => {
+    setEditingPostId(null);
+    setPostError(null);
+    setPostForm({ caption: '', mediaItems: [] });
+    setShowPostModal(true);
+  };
+
+  const handleOpenEditPostModal = (post: MyPost) => {
+    setEditingPostId(post.id);
+    setPostError(null);
+    setPostForm({
+      caption: post.caption,
+      mediaItems: [{ uri: post.mediaUrl, mimeType: post.mediaType === 'video' ? 'video/mp4' : 'image/jpeg' }],
+    });
+    setShowPostModal(true);
+  };
+
+  const handleClosePostModal = () => {
+    setShowPostModal(false);
+    setEditingPostId(null);
+    setPostError(null);
+    setPostForm({ caption: '', mediaItems: [] });
   };
 
   const handlePickImage = async () => {
@@ -228,6 +305,147 @@ export default function ProfileScreen() {
     }
   };
 
+  const handlePickPostMedia = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== 'granted') {
+      setPostError('Media library permission is required to upload a post.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsMultipleSelection: true,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets.length > 0) {
+      const mediaItems = result.assets.map((asset) => ({
+        uri: asset.uri,
+        mimeType: asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg'),
+      }));
+
+      setPostForm((prev) => ({
+        ...prev,
+        mediaItems,
+      }));
+      setPostError(null);
+    }
+  };
+
+  const handleUploadPost = async () => {
+    if (!session?.access_token) {
+      setPostError('No authentication token available.');
+      return;
+    }
+
+    setPostUploading(true);
+    setPostError(null);
+
+    try {
+      if (editingPostId) {
+        const { data, error: updateError } = await updateMyPostCaption(
+          session.access_token,
+          editingPostId,
+          postForm.caption.trim()
+        );
+
+        if (updateError) {
+          setPostError(updateError);
+          return;
+        }
+
+        if (data?.post) {
+          setPosts((prev) => prev.map((post) => (post.id === data.post.id ? data.post : post)));
+          handleClosePostModal();
+        }
+      } else {
+        if (postForm.mediaItems.length === 0) {
+          setPostError('Please choose one or more photos/videos first.');
+          return;
+        }
+
+        const createdPosts: MyPost[] = [];
+        for (const mediaItem of postForm.mediaItems) {
+          const { data, error: uploadError } = await createMyPost(
+            session.access_token,
+            mediaItem.uri,
+            mediaItem.mimeType,
+            postForm.caption.trim()
+          );
+
+          if (uploadError) {
+            if (createdPosts.length > 0) {
+              setPosts((prev) => [...createdPosts.reverse(), ...prev]);
+            }
+            setPostError(uploadError);
+            return;
+          }
+
+          if (data?.post) {
+            createdPosts.push(data.post);
+          }
+        }
+
+        if (createdPosts.length > 0) {
+          setPosts((prev) => [...createdPosts.reverse(), ...prev]);
+          handleClosePostModal();
+        }
+      }
+    } catch {
+      setPostError(editingPostId ? 'Failed to update post.' : 'Failed to upload post.');
+    } finally {
+      setPostUploading(false);
+    }
+  };
+
+  const handleDeletePost = (postId: string) => {
+    if (!session?.access_token) {
+      setPostsError('No authentication token available.');
+      return;
+    }
+
+    Alert.alert('Delete post', 'Are you sure you want to delete this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingPostId(postId);
+          setPostsError(null);
+
+          try {
+            const { error: deleteError } = await deleteMyPost(session.access_token as string, postId);
+            if (deleteError) {
+              setPostsError(deleteError);
+              return;
+            }
+            setPosts((prev) => prev.filter((post) => post.id !== postId));
+          } catch {
+            setPostsError('Failed to delete post.');
+          } finally {
+            setDeletingPostId(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handlePostOptions = (post: MyPost) => {
+    Alert.alert('Post options', 'Choose an action for this post.', [
+      {
+        text: 'Edit caption',
+        onPress: () => handleOpenEditPostModal(post),
+      },
+      {
+        text: 'Delete post',
+        style: 'destructive',
+        onPress: () => handleDeletePost(post.id),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -287,6 +505,56 @@ export default function ProfileScreen() {
           </View>
         ))}
       </View>
+      
+      <View style={styles.postsSection}>
+        <View style={styles.postsHeader}>
+          <Text style={styles.postsTitle}>My Posts</Text>
+          <TouchableOpacity style={styles.addPostButton} onPress={handleOpenPostModal} activeOpacity={0.8}>
+            <Text style={styles.addPostButtonText}>Upload</Text>
+          </TouchableOpacity>
+        </View>
+
+        {postsLoading && (
+          <View style={styles.postsStateWrap}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
+
+        {!postsLoading && !!postsError && (
+          <Text style={styles.postsErrorText}>{postsError}</Text>
+        )}
+
+        {!postsLoading && !postsError && posts.length === 0 && (
+          <Text style={styles.postsEmptyText}>No posts yet. Share your previous works and achievements.</Text>
+        )}
+
+        {!postsLoading && !postsError && posts.length > 0 && (
+          <View style={styles.postsGrid}>
+            {posts.map((post) => (
+              <TouchableOpacity
+                key={post.id}
+                style={styles.postCard}
+                activeOpacity={0.95}
+                onLongPress={() => handlePostOptions(post)}
+              >
+                {post.mediaType === 'image' ? (
+                  <Image source={{ uri: post.mediaUrl }} style={styles.postImage} />
+                ) : (
+                  <Video
+                    source={{ uri: post.mediaUrl }}
+                    style={styles.postVideoPlayer}
+                    resizeMode={ResizeMode.COVER}
+                    useNativeControls
+                    isLooping
+                  />
+                )}
+                {!!post.caption && <Text style={styles.postCaption} numberOfLines={2}>{post.caption}</Text>}
+                <Text style={styles.postDateText}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
 
       <View style={styles.menuSection}>
         {MENU_ITEMS.map((item) => (
@@ -317,6 +585,48 @@ export default function ProfileScreen() {
           )) : <Text style={styles.emptySkillsText}>No skills added yet.</Text>}
         </View>
       </View>
+{/* 
+      <View style={styles.postsSection}>
+        <View style={styles.postsHeader}>
+          <Text style={styles.postsTitle}>My Posts</Text>
+          <TouchableOpacity style={styles.addPostButton} onPress={handleOpenPostModal} activeOpacity={0.8}>
+            <Text style={styles.addPostButtonText}>Upload</Text>
+          </TouchableOpacity>
+        </View>
+
+        {postsLoading && (
+          <View style={styles.postsStateWrap}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
+
+        {!postsLoading && !!postsError && (
+          <Text style={styles.postsErrorText}>{postsError}</Text>
+        )}
+
+        {!postsLoading && !postsError && posts.length === 0 && (
+          <Text style={styles.postsEmptyText}>No posts yet. Share your previous works and achievements.</Text>
+        )}
+
+        {!postsLoading && !postsError && posts.length > 0 && (
+          <View style={styles.postsGrid}>
+            {posts.map((post) => (
+              <View key={post.id} style={styles.postCard}>
+                {post.mediaType === 'image' ? (
+                  <Image source={{ uri: post.mediaUrl }} style={styles.postImage} />
+                ) : (
+                  <View style={styles.postVideoPlaceholder}>
+                    <Video size={22} color={Colors.white} />
+                    <Text style={styles.postVideoText}>Video</Text>
+                  </View>
+                )}
+                {!!post.caption && <Text style={styles.postCaption} numberOfLines={2}>{post.caption}</Text>}
+                <Text style={styles.postDateText}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View> */}
 
       {/* Edit Profile Modal */}
       <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={handleCloseEditModal}>
@@ -478,6 +788,76 @@ export default function ProfileScreen() {
                 />
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showPostModal} transparent animationType="slide" onRequestClose={handleClosePostModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingPostId ? 'Edit Post' : 'Create Post'}</Text>
+              <TouchableOpacity onPress={handleClosePostModal} activeOpacity={0.7}>
+                <X size={24} color={Colors.gray800} />
+              </TouchableOpacity>
+            </View>
+
+            {postError && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorBoxText}>{postError}</Text>
+              </View>
+            )}
+
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Caption</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Describe this work or achievement"
+                value={postForm.caption}
+                onChangeText={(text) => setPostForm((prev) => ({ ...prev, caption: text }))}
+                placeholderTextColor={Colors.gray400}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Media</Text>
+              {postForm.mediaItems.length > 0 ? (
+                postForm.mediaItems[0].mimeType.startsWith('video/') ? (
+                  <View style={styles.postModalVideoPreview}>
+                    <VideoIcon size={22} color={Colors.white} />
+                    <Text style={styles.postVideoText}>
+                      {postForm.mediaItems.length === 1 ? 'Video selected' : `${postForm.mediaItems.length} media selected`}
+                    </Text>
+                  </View>
+                ) : (
+                  <Image source={{ uri: postForm.mediaItems[0].uri }} style={styles.postModalImagePreview} />
+                )
+              ) : (
+                <Text style={styles.postsEmptyText}>No media selected</Text>
+              )}
+              {!editingPostId ? (
+                <View style={styles.postModalButtons}>
+                  <Button title="Choose Photo/Video(s)" onPress={handlePickPostMedia} />
+                </View>
+              ) : (
+                <Text style={styles.editPostHint}>Media replacement is not enabled yet. You can update caption.</Text>
+              )}
+            </View>
+
+            <View style={styles.formActions}>
+              <TouchableOpacity
+                style={[styles.formButton, styles.cancelButton]}
+                onPress={handleClosePostModal}
+                disabled={postUploading}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <Button
+                title={editingPostId ? 'Save Changes' : 'Upload Post'}
+                onPress={handleUploadPost}
+                loading={postUploading}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -672,6 +1052,92 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.sm,
     color: Colors.gray500,
   },
+  postsSection: {
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+    marginTop: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+  },
+  postsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  postsTitle: {
+    fontSize: FontSizes.lg,
+    color: Colors.gray900,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  addPostButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.full,
+  },
+  addPostButtonText: {
+    color: Colors.white,
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  postsStateWrap: {
+    paddingVertical: Spacing.lg,
+    alignItems: 'center',
+  },
+  postsErrorText: {
+    color: Colors.error,
+    fontSize: FontSizes.sm,
+  },
+  postsEmptyText: {
+    color: Colors.gray500,
+    fontSize: FontSizes.sm,
+  },
+  postsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  postCard: {
+    width: '47%',
+  },
+  postImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+  },
+  postVideoPlaceholder: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.gray800,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  postVideoPlayer: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.black,
+  },
+  postVideoText: {
+    color: Colors.white,
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.medium as any,
+  },
+  postCaption: {
+    marginTop: 6,
+    color: Colors.gray800,
+    fontSize: FontSizes.xs,
+  },
+  postDateText: {
+    marginTop: 4,
+    color: Colors.gray500,
+    fontSize: FontSizes.xs,
+  },
   
   // Modal styles
   modalOverlay: {
@@ -686,6 +1152,28 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
     paddingHorizontal: Spacing.lg,
     maxHeight: '90%',
+  },
+  postModalImagePreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: BorderRadius.md,
+  },
+  postModalVideoPreview: {
+    width: '100%',
+    height: 140,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.gray800,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  postModalButtons: {
+    marginTop: Spacing.md,
+  },
+  editPostHint: {
+    marginTop: Spacing.sm,
+    color: Colors.gray500,
+    fontSize: FontSizes.xs,
   },
   modalHeader: {
     flexDirection: 'row',
