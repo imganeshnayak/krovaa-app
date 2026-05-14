@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { loginUser, registerUser } from '@/lib/authApi';
 
 interface AuthUser {
   id: string;
@@ -21,28 +22,22 @@ interface AuthState {
   session: AuthSession | null;
   user: AuthUser | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, retypePassword: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-function createLocalSession(email: string, fullName?: string) {
-  const user: AuthUser = {
-    id: 'local-user',
-    email,
-    user_metadata: fullName ? { full_name: fullName } : {},
-  };
-
+function createSession(token: string, user: AuthUser): AuthSession {
   return {
-    access_token: 'local-access-token',
-    refresh_token: 'local-refresh-token',
-    expires_in: 3600,
-    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    access_token: token,
+    refresh_token: token,
+    expires_in: 60 * 60 * 24 * 7,
+    expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
     token_type: 'bearer',
     user,
-  } as AuthSession;
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -54,20 +49,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const session = createLocalSession(email, fullName);
-    setSession(session);
-    setUser(session.user);
-    setLoading(false);
-    return { error: null };
+  const setAuthState = (token: string, authUser: AuthUser) => {
+    const nextSession = createSession(token, authUser);
+    setSession(nextSession);
+    setUser(authUser);
+  };
+
+  const signUp = async (email: string, password: string, retypePassword: string) => {
+    try {
+      const { data, error } = await registerUser(email, password, retypePassword);
+      if (error || !data) {
+        return { error };
+      }
+
+      setAuthState(data.token, data.user);
+      return { error: null };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Unable to create account.' };
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const session = createLocalSession(email);
-    setSession(session);
-    setUser(session.user);
-    setLoading(false);
-    return { error: null };
+    try {
+      const { data, error } = await loginUser(email, password);
+      if (error || !data) {
+        return { error };
+      }
+
+      setAuthState(data.token, data.user);
+      return { error: null };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Unable to sign in.' };
+    }
   };
 
   const signOut = async () => {

@@ -1,20 +1,32 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
-import { mockSignIn } from '@/lib/mockAuth';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     setError(null);
-    const { error } = await mockSignIn(email, password);
-    if (error) setError(error);
+    setLoading(true);
+
+    const { error } = await signIn(email.trim(), password);
+    setLoading(false);
+
+    if (error) {
+      setError(error);
+      return;
+    }
+
+    router.replace('/(tabs)');
   };
 
   return (
@@ -62,7 +74,7 @@ export default function LoginScreen() {
           <TouchableOpacity style={styles.forgotPassword}>
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
-          <Button title="Sign In" onPress={handleLogin} loading={false} />
+          <Button title="Sign In" onPress={handleLogin} loading={loading} />
         </View>
 
         <View style={styles.footer}>

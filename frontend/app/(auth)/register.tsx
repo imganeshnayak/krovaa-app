@@ -1,21 +1,33 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
-import { mockSignUp } from '@/lib/mockAuth';
+import { useAuth } from '@/context/AuthContext';
 
 export default function RegisterScreen() {
-  const [fullName, setFullName] = useState('');
+  const router = useRouter();
+  const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [retypePassword, setRetypePassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
     setError(null);
-    const { error } = await mockSignUp(email, password, fullName);
-    if (error) setError(error);
+    setLoading(true);
+
+    const { error } = await signUp(email.trim(), password, retypePassword);
+    setLoading(false);
+
+    if (error) {
+      setError(error);
+      return;
+    }
+
+    router.replace('/(tabs)');
   };
 
   return (
@@ -47,13 +59,6 @@ export default function RegisterScreen() {
             </View>
           )}
           <Input
-            label="Full Name"
-            placeholder="Enter your full name"
-            value={fullName}
-            onChangeText={setFullName}
-            autoCapitalize="words"
-          />
-          <Input
             label="Email"
             placeholder="Enter your email"
             value={email}
@@ -67,7 +72,14 @@ export default function RegisterScreen() {
             onChangeText={setPassword}
             secureTextEntry
           />
-          <Button title="Create Account" onPress={handleRegister} loading={false} />
+          <Input
+            label="Retype Password"
+            placeholder="Retype your password"
+            value={retypePassword}
+            onChangeText={setRetypePassword}
+            secureTextEntry
+          />
+          <Button title="Create Account" onPress={handleRegister} loading={loading} />
         </View>
 
         <View style={styles.footer}>
