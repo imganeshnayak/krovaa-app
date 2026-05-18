@@ -1,41 +1,183 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, FlatList, Image
+  TextInput, Modal, FlatList, Image, ActivityIndicator, Alert
 } from 'react-native';
 import { Search, Plus, MapPin, Clock, DollarSign, Briefcase, ListFilter as Filter, X, ChevronDown } from 'lucide-react-native';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import { useRouter } from 'expo-router';
+import { useAuth } from '@/context/AuthContext';
+import { getJobs, postJob, applyJob, type Job } from '@/lib/jobsApi';
 
 const JOB_CATEGORIES = ['All', 'Design', 'Development', 'Marketing', 'Writing', 'Video'];
 
-const MOCK_JOBS = [
-  { id: '1', title: 'Mobile App UI Design', company: 'TechCorp', budget: '$500 - $1,000', location: 'Remote', type: 'Design', posted: '2h ago', avatar: 'https://images.pexels.com/photos/3183150/pexels-photo-3183150.jpeg?auto=compress&cs=tinysrgb&w=100' },
-  { id: '2', title: 'React Native Developer', company: 'StartupXYZ', budget: '$2,000 - $3,500', location: 'San Francisco, CA', type: 'Development', posted: '5h ago', avatar: 'https://images.pexels.com/photos/3183197/pexels-photo-3183197.jpeg?auto=compress&cs=tinysrgb&w=100' },
-  { id: '3', title: 'Social Media Campaign', company: 'BrandCo', budget: '$300 - $600', location: 'Remote', type: 'Marketing', posted: '1d ago', avatar: 'https://images.pexels.com/photos/3183171/pexels-photo-3183171.jpeg?auto=compress&cs=tinysrgb&w=100' },
-  { id: '4', title: 'Blog Content Writer', company: 'MediaGroup', budget: '$150 - $400', location: 'Remote', type: 'Writing', posted: '1d ago', avatar: 'https://images.pexels.com/photos/3183185/pexels-photo-3183185.jpeg?auto=compress&cs=tinysrgb&w=100' },
-  { id: '5', title: 'Product Explainer Video', company: 'VidStudio', budget: '$800 - $1,500', location: 'Los Angeles, CA', type: 'Video', posted: '2d ago', avatar: 'https://images.pexels.com/photos/3183165/pexels-photo-3183165.jpeg?auto=compress&cs=tinysrgb&w=100' },
-  { id: '6', title: 'E-commerce Website Build', company: 'ShopEasy', budget: '$3,000 - $5,000', location: 'New York, NY', type: 'Development', posted: '3d ago', avatar: 'https://images.pexels.com/photos/3183136/pexels-photo-3183136.jpeg?auto=compress&cs=tinysrgb&w=100' },
-];
-
 export default function JobsScreen() {
-  const [activeTab, setActiveTab] = useState<'search' | 'post'>('search');
+  const router = useRouter();
+  const { session } = useAuth();
+
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  // Post form state
   const [showPostModal, setShowPostModal] = useState(false);
   const [postTitle, setPostTitle] = useState('');
   const [postBudget, setPostBudget] = useState('');
   const [postDescription, setPostDescription] = useState('');
   const [postCategory, setPostCategory] = useState('Development');
   const [postLocation, setPostLocation] = useState('');
+  const [posting, setPosting] = useState(false);
 
-  const filteredJobs = MOCK_JOBS.filter((job) => {
-    const matchesCategory = selectedCategory === 'All' || job.type === selectedCategory;
-    const matchesSearch = !searchQuery || job.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // Debounce search query to optimize API requests
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 400);
 
-  const renderJobCard = ({ item }: { item: typeof MOCK_JOBS[0] }) => (
-    <TouchableOpacity style={styles.jobCard} activeOpacity={0.7}>
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchQuery]);
+
+  const fetchJobs = async (showLoadingIndicator = false) => {
+    if (showLoadingIndicator) setLoading(true);
+    setError(null);
+
+    const { data, error: fetchError } = await getJobs(
+      session?.access_token,
+      selectedCategory,
+      debouncedSearchQuery
+    );
+
+    if (fetchError) {
+      setError(fetchError);
+    } else if (data) {
+      setJobs(data);
+    }
+    setLoading(false);
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    fetchJobs(true);
+  }, [selectedCategory, debouncedSearchQuery, session?.access_token]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchJobs(false);
+  };
+
+  const handlePostJob = async () => {
+    if (!session?.access_token) {
+      Alert.alert('Authentication required', 'Please sign in to post a job.');
+      return;
+    }
+
+    if (!postTitle.trim() || !postBudget.trim() || !postLocation.trim() || !postDescription.trim()) {
+      Alert.alert('Validation Error', 'All fields are required.');
+      return;
+    }
+
+    setPosting(true);
+    const { data, error: postError } = await postJob(session.access_token, {
+      title: postTitle,
+      budget: postBudget,
+      location: postLocation,
+      type: postCategory,
+      description: postDescription,
+    });
+
+    setPosting(false);
+
+    if (postError || !data) {
+      Alert.alert('Error', postError || 'Failed to post job.');
+    } else {
+      Alert.alert('Success', 'Your job post has been published!');
+      setShowPostModal(false);
+      // Reset form
+      setPostTitle('');
+      setPostBudget('');
+      setPostLocation('');
+      setPostDescription('');
+      // Prepend newly posted job to active list
+      setJobs((prev) => [data, ...prev]);
+    }
+  };
+
+  const handleApply = async (job: Job) => {
+    if (!session?.access_token) {
+      Alert.alert('Authentication required', 'Please sign in to apply for this job.');
+      return;
+    }
+
+    if (job.hasApplied) {
+      Alert.alert('Already Applied', 'You have already submitted your application for this job.');
+      return;
+    }
+
+    if (job.posterId === session.user.id) {
+      Alert.alert('Action Restricted', 'You cannot apply for your own job posting.');
+      return;
+    }
+
+    Alert.alert(
+      'Apply for Job',
+      `Would you like to apply for "${job.title}"? This will instantly start a chat with the employer, ${job.posterName}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Apply Now',
+          onPress: async () => {
+            setLoading(true);
+            const { data, error: applyError } = await applyJob(session.access_token, job.id);
+            setLoading(false);
+
+            if (applyError || !data) {
+              Alert.alert('Error', applyError || 'Failed to apply for job.');
+            } else {
+              Alert.alert(
+                'Success!',
+                'Your application was sent successfully. We are redirecting you to your chat with the employer.',
+                [
+                  {
+                    text: 'Open Chat',
+                    onPress: () => {
+                      router.push(`/chat/${data.conversationId}`);
+                    },
+                  },
+                ]
+              );
+              // Mark as applied locally
+              setJobs((prev) =>
+                prev.map((j) =>
+                  j.id === job.id
+                    ? { ...j, hasApplied: true, applicantCount: j.applicantCount + 1 }
+                    : j
+                )
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const renderJobCard = ({ item }: { item: Job }) => (
+    <TouchableOpacity
+      style={styles.jobCard}
+      activeOpacity={0.7}
+      onPress={() => {
+        Alert.alert(
+          item.title,
+          `Company: ${item.company}\nLocation: ${item.location}\nBudget: ${item.budget}\nCategory: ${item.type}\n\nDescription:\n${item.description}`
+        );
+      }}
+    >
       <View style={styles.jobCardHeader}>
         <Image source={{ uri: item.avatar }} style={styles.jobAvatar} />
         <View style={styles.jobInfo}>
@@ -61,8 +203,17 @@ export default function JobsScreen() {
         <View style={styles.jobTypeBadge}>
           <Text style={styles.jobTypeText}>{item.type}</Text>
         </View>
-        <TouchableOpacity style={styles.applyButton}>
-          <Text style={styles.applyButtonText}>Apply Now</Text>
+        <TouchableOpacity
+          style={[
+            styles.applyButton,
+            item.hasApplied && styles.appliedButton
+          ]}
+          onPress={() => handleApply(item)}
+          disabled={item.hasApplied}
+        >
+          <Text style={styles.applyButtonText}>
+            {item.hasApplied ? 'Applied' : 'Apply Now'}
+          </Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -89,33 +240,56 @@ export default function JobsScreen() {
         />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll} contentContainerStyle={styles.categoriesContainer}>
-        {JOB_CATEGORIES.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[styles.categoryChip, selectedCategory === cat && styles.categoryChipActive]}
-            onPress={() => setSelectedCategory(cat)}
-          >
-            <Text style={[styles.categoryText, selectedCategory === cat && styles.categoryTextActive]}>
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={{ height: 50 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesScroll}
+          contentContainerStyle={styles.categoriesContainer}
+        >
+          {JOB_CATEGORIES.map((cat) => (
+            <TouchableOpacity
+              key={cat}
+              style={[styles.categoryChip, selectedCategory === cat && styles.categoryChipActive]}
+              onPress={() => setSelectedCategory(cat)}
+            >
+              <Text style={[styles.categoryText, selectedCategory === cat && styles.categoryTextActive]}>
+                {cat}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-      <FlatList
-        data={filteredJobs}
-        renderItem={renderJobCard}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.jobList}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Briefcase size={48} color={Colors.gray300} />
-            <Text style={styles.emptyText}>No jobs found</Text>
-          </View>
-        }
-      />
+      {loading && jobs.length === 0 ? (
+        <View style={[styles.centerState, { flex: 1 }]}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : error ? (
+        <View style={styles.centerState}>
+          <Briefcase size={48} color={Colors.gray300} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchJobs(true)}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={jobs}
+          renderItem={renderJobCard}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.jobList}
+          showsVerticalScrollIndicator={false}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Briefcase size={48} color={Colors.gray300} />
+              <Text style={styles.emptyText}>No jobs found</Text>
+            </View>
+          }
+        />
+      )}
 
       <Modal visible={showPostModal} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalContainer}>
@@ -192,10 +366,15 @@ export default function JobsScreen() {
             </View>
 
             <TouchableOpacity
-              style={styles.submitButton}
-              onPress={() => setShowPostModal(false)}
+              style={[styles.submitButton, posting && { backgroundColor: Colors.gray400 }]}
+              onPress={handlePostJob}
+              disabled={posting}
             >
-              <Text style={styles.submitButtonText}>Post Job</Text>
+              {posting ? (
+                <ActivityIndicator color={Colors.white} />
+              ) : (
+                <Text style={styles.submitButtonText}>Post Job</Text>
+              )}
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -247,6 +426,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderWidth: 1.5,
     borderColor: Colors.gray200,
+    marginBottom: Spacing.xs,
   },
   searchInput: {
     flex: 1,
@@ -290,6 +470,11 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
     marginBottom: Spacing.md,
+    elevation: 1,
+    shadowColor: Colors.black,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
   },
   jobCardHeader: {
     flexDirection: 'row',
@@ -352,7 +537,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
   },
+  appliedButton: {
+    backgroundColor: Colors.gray400,
+  },
   applyButtonText: {
+    color: Colors.white,
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  centerState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: Spacing.lg,
+  },
+  errorText: {
+    fontSize: FontSizes.md,
+    color: Colors.error,
+    textAlign: 'center',
+    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  retryButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  retryButtonText: {
     color: Colors.white,
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.semiBold as any,
@@ -450,3 +662,4 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.semiBold as any,
   },
 });
+
