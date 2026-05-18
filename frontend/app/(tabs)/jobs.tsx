@@ -174,7 +174,7 @@ export default function JobsScreen() {
       onPress={() => {
         Alert.alert(
           item.title,
-          `Company: ${item.company}\nLocation: ${item.location}\nBudget: ${item.budget}\nCategory: ${item.type}\n\nDescription:\n${item.description}`
+          `Company: ${item.company}\nLocation: ${item.location}\nBudget: ${item.budget ? String(item.budget).replace(/\$/g, '₹') : ''}\nCategory: ${item.type}\n\nDescription:\n${item.description}`
         );
       }}
     >
@@ -188,7 +188,9 @@ export default function JobsScreen() {
       <View style={styles.jobMeta}>
         <View style={styles.jobMetaItem}>
           <IndianRupee size={14} color={Colors.secondary} />
-          <Text style={styles.jobMetaText}>{item.budget}</Text>
+          <Text style={styles.jobMetaText}>
+            {item.budget ? String(item.budget).replace(/\$/g, '₹') : ''}
+          </Text>
         </View>
         <View style={styles.jobMetaItem}>
           <MapPin size={14} color={Colors.primary} />

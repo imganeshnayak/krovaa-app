@@ -465,7 +465,7 @@ export default function ProfileScreen() {
   const STATS = [
     { label: 'Jobs Done', value: profile.stats.jobsDone.toString() },
     { label: 'Reviews', value: profile.stats.reviews.toFixed(1) },
-    { label: 'Earned', value: `$${(profile.stats.earned / 1000).toFixed(1)}K` },
+    { label: 'Earned', value: `₹${(profile.stats.earned / 1000).toFixed(1)}K` },
   ];
 
   return (

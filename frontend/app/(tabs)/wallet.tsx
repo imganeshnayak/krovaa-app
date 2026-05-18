@@ -3,11 +3,11 @@ import { ArrowUpRight, ArrowDownLeft, Plus, TrendingUp, Clock } from 'lucide-rea
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 
 const TRANSACTIONS = [
-  { id: '1', type: 'incoming', label: 'Payment from Sarah Johnson', amount: '+$250.00', date: 'Today, 2:30 PM', status: 'completed' },
-  { id: '2', type: 'outgoing', label: 'Escrow for Logo Design', amount: '-$150.00', date: 'Today, 11:00 AM', status: 'pending' },
-  { id: '3', type: 'incoming', label: 'Payment from Mike Chen', amount: '+$500.00', date: 'Yesterday', status: 'completed' },
-  { id: '4', type: 'outgoing', label: 'Platform Fee', amount: '-$25.00', date: 'Yesterday', status: 'completed' },
-  { id: '5', type: 'incoming', label: 'Payment from Emily Davis', amount: '+$320.00', date: 'May 4', status: 'completed' },
+  { id: '1', type: 'incoming', label: 'Payment from Sarah Johnson', amount: '+₹250.00', date: 'Today, 2:30 PM', status: 'completed' },
+  { id: '2', type: 'outgoing', label: 'Escrow for Logo Design', amount: '-₹150.00', date: 'Today, 11:00 AM', status: 'pending' },
+  { id: '3', type: 'incoming', label: 'Payment from Mike Chen', amount: '+₹500.00', date: 'Yesterday', status: 'completed' },
+  { id: '4', type: 'outgoing', label: 'Platform Fee', amount: '-₹25.00', date: 'Yesterday', status: 'completed' },
+  { id: '5', type: 'incoming', label: 'Payment from Emily Davis', amount: '+₹320.00', date: 'May 4', status: 'completed' },
 ];
 
 export default function WalletScreen() {
@@ -20,9 +20,9 @@ export default function WalletScreen() {
 
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Available Balance</Text>
-          <Text style={styles.balanceAmount}>$2,895.00</Text>
+          <Text style={styles.balanceAmount}>₹2,895.00</Text>
           <Text style={styles.pendingText}>
-            <Clock size={12} color={Colors.warning} /> $150.00 pending
+            <Clock size={12} color={Colors.warning} /> ₹150.00 pending
           </Text>
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.actionButton}>
