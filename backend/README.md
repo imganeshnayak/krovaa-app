@@ -32,6 +32,7 @@ npm run dev
 - `POST /api/auth/register/send-otp` with `email`, `password`, `retypePassword`
 - `POST /api/auth/register/verify-otp` with `email`, `otp`
 - `POST /api/auth/login` with `email`, `password`
+- Each registered user receives a unique 6-character alphanumeric `userCode`.
 
 ## Profile endpoints
 

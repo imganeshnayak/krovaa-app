@@ -6,6 +6,8 @@ import User from '../models/User.js';
 const router = express.Router();
 const pendingRegistrations = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000;
+const USER_CODE_LENGTH = 6;
+const USER_CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
 function createToken(user) {
   const secret = process.env.JWT_SECRET;
@@ -25,8 +27,44 @@ function getUserResponse(user, token) {
     user: {
       id: user._id.toString(),
       email: user.email,
+      username: user.username,
+      userCode: user.userCode,
     },
   };
+}
+
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase();
+}
+
+function generateUserCode() {
+  let code = '';
+
+  for (let index = 0; index < USER_CODE_LENGTH; index += 1) {
+    const randomIndex = Math.floor(Math.random() * USER_CODE_ALPHABET.length);
+    code += USER_CODE_ALPHABET[randomIndex];
+  }
+
+  return code;
+}
+
+async function createUserWithUniqueCode(userData) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const userCode = generateUserCode();
+
+    try {
+      return await User.create({
+        ...userData,
+        userCode,
+      });
+    } catch (error) {
+      if (error?.code !== 11000 || !error?.keyPattern?.userCode) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Unable to generate a unique user code.');
 }
 
 function generateOtp() {
@@ -84,10 +122,10 @@ function getPendingRegistration(email) {
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, retypePassword } = req.body;
+    const { email, username, password, retypePassword } = req.body;
 
-    if (!email || !password || !retypePassword) {
-      return res.status(400).json({ error: 'Email, password, and retype password are required.' });
+    if (!email || !username || !password || !retypePassword) {
+      return res.status(400).json({ error: 'Email, username, password, and retype password are required.' });
     }
 
     if (password !== retypePassword) {
@@ -98,13 +136,26 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedUsername = normalizeUsername(username);
+
+    if (!/^[a-z0-9_]{3,20}$/.test(normalizedUsername)) {
+      return res.status(400).json({ error: 'Username must be 3 to 20 characters and use only letters, numbers, or underscores.' });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
-    const user = await User.create({
-      email,
+    const existingUsername = await User.findOne({ username: normalizedUsername });
+    if (existingUsername) {
+      return res.status(409).json({ error: 'This username is already taken.' });
+    }
+
+    const user = await createUserWithUniqueCode({
+      email: normalizedEmail,
+      username: normalizedUsername,
       password,
     });
 
@@ -120,10 +171,10 @@ router.post('/register', async (req, res) => {
 
 router.post('/register/send-otp', async (req, res) => {
   try {
-    const { email, password, retypePassword } = req.body;
+    const { email, username, password, retypePassword } = req.body;
 
-    if (!email || !password || !retypePassword) {
-      return res.status(400).json({ error: 'Email, password, and retype password are required.' });
+    if (!email || !username || !password || !retypePassword) {
+      return res.status(400).json({ error: 'Email, username, password, and retype password are required.' });
     }
 
     if (password !== retypePassword) {
@@ -135,15 +186,27 @@ router.post('/register/send-otp', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const normalizedUsername = normalizeUsername(username);
+
+    if (!/^[a-z0-9_]{3,20}$/.test(normalizedUsername)) {
+      return res.status(400).json({ error: 'Username must be 3 to 20 characters and use only letters, numbers, or underscores.' });
+    }
+
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
+    }
+
+    const existingUsername = await User.findOne({ username: normalizedUsername });
+    if (existingUsername) {
+      return res.status(409).json({ error: 'This username is already taken.' });
     }
 
     const otp = generateOtp();
     const expiresAt = Date.now() + OTP_TTL_MS;
     pendingRegistrations.set(normalizedEmail, {
       email: normalizedEmail,
+      username: normalizedUsername,
       password,
       otp,
       expiresAt,
@@ -193,8 +256,15 @@ router.post('/register/verify-otp', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
-    const user = await User.create({
+    const existingUsername = await User.findOne({ username: pending.username });
+    if (existingUsername) {
+      pendingRegistrations.delete(normalizedEmail);
+      return res.status(409).json({ error: 'This username is already taken.' });
+    }
+
+    const user = await createUserWithUniqueCode({
       email: normalizedEmail,
+      username: pending.username,
       password: pending.password,
     });
 

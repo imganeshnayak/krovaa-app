@@ -64,6 +64,8 @@ const API_BASE_URL = getApiBaseUrl();
 export interface UserProfile {
   id: string;
   email: string;
+  username: string;
+  userCode: string;
   fullName: string;
   location: string;
   city: string;
@@ -80,6 +82,7 @@ export interface UserProfile {
     reviews: number;
     earned: number;
   };
+  blockedUsers?: string[];
 }
 
 type ProfileResponse = {
@@ -155,6 +158,14 @@ export async function getCurrentUserProfile(token: string) {
 
 export async function getUserProfile(userId: string) {
   return publicRequest<ProfileResponse>(`/api/profile/${userId}`);
+}
+
+export async function getUserProfileByCode(userCode: string) {
+  return publicRequest<ProfileResponse>(`/api/profile/code/${encodeURIComponent(userCode)}`);
+}
+
+export async function getUserProfileByUsername(username: string) {
+  return publicRequest<ProfileResponse>(`/api/profile/username/${encodeURIComponent(username)}`);
 }
 
 export async function updateUserProfile(

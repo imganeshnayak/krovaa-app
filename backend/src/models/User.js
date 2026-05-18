@@ -21,6 +21,20 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    username: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    userCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      uppercase: true,
+      trim: true,
+    },
     password: {
       type: String,
       required: true,
@@ -90,6 +104,11 @@ const userSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+    },
+    blockedUsers: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: 'User',
+      default: [],
     },
   },
   { timestamps: true }

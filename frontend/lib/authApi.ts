@@ -69,6 +69,8 @@ type AuthResponse = {
   user: {
     id: string;
     email: string;
+    username: string;
+    userCode: string;
   };
 };
 
@@ -102,16 +104,16 @@ async function request<TResponse>(path: string, body: Record<string, string>) {
   }
 }
 
-export async function registerUser(email: string, password: string, retypePassword: string) {
-  return request<AuthResponse>('/api/auth/register', { email, password, retypePassword });
+export async function registerUser(email: string, username: string, password: string, retypePassword: string) {
+  return request<AuthResponse>('/api/auth/register', { email, username, password, retypePassword });
 }
 
 export async function loginUser(email: string, password: string) {
   return request<AuthResponse>('/api/auth/login', { email, password });
 }
 
-export async function sendRegistrationOtp(email: string, password: string, retypePassword: string) {
-  return request<OtpSendResponse>('/api/auth/register/send-otp', { email, password, retypePassword });
+export async function sendRegistrationOtp(email: string, username: string, password: string, retypePassword: string) {
+  return request<OtpSendResponse>('/api/auth/register/send-otp', { email, username, password, retypePassword });
 }
 
 export async function verifyRegistrationOtp(email: string, otp: string) {

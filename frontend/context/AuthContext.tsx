@@ -5,6 +5,8 @@ import { loginUser, registerUser } from '@/lib/authApi';
 interface AuthUser {
   id: string;
   email: string;
+  username?: string;
+  userCode?: string;
   user_metadata?: {
     full_name?: string;
   };
@@ -23,7 +25,7 @@ interface AuthState {
   session: AuthSession | null;
   user: AuthUser | null;
   loading: boolean;
-  signUp: (email: string, password: string, retypePassword: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, username: string, password: string, retypePassword: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -104,9 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await persistSession(nextSession);
   };
 
-  const signUp = async (email: string, password: string, retypePassword: string) => {
+  const signUp = async (email: string, username: string, password: string, retypePassword: string) => {
     try {
-      const { data, error } = await registerUser(email, password, retypePassword);
+      const { data, error } = await registerUser(email, username, password, retypePassword);
       if (error || !data) {
         return { error };
       }

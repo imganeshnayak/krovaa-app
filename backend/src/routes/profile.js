@@ -1,7 +1,7 @@
 import express from 'express';
-import fs from 'fs';
-import path from 'path';
 import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import User from '../models/User.js';
 import { verifyToken } from '../middleware/auth.js';
 
@@ -17,10 +17,40 @@ const PROFESSION_OPTIONS = [
   'other',
 ];
 
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Configure Cloudinary storage for avatars
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'krovaa/profiles',
+    resource_type: 'auto',
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('Only image uploads are allowed.'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
 function mapUserResponse(user) {
   return {
     id: user._id.toString(),
     email: user.email,
+    username: user.username,
+    userCode: user.userCode,
     fullName: user.fullName,
     location: user.location,
     city: user.city,
@@ -33,39 +63,53 @@ function mapUserResponse(user) {
     avatar: user.avatar,
     skills: user.skills,
     stats: user.stats,
+    blockedUsers: user.blockedUsers ? user.blockedUsers.map((id) => id.toString()) : [],
   };
 }
 
-const uploadDirectory = path.join(process.cwd(), 'uploads', 'profile');
-if (!fs.existsSync(uploadDirectory)) {
-  fs.mkdirSync(uploadDirectory, { recursive: true });
-}
+// GET user profile by unique user code
+router.get('/code/:userCode', async (req, res) => {
+  try {
+    const userCode = String(req.params.userCode || '').trim().toUpperCase();
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDirectory);
-  },
-  filename: (req, file, cb) => {
-    const extension = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-    cb(null, `${req.userId}-${Date.now()}${extension}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024,
-  },
-  fileFilter: (_req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) {
-      cb(new Error('Only image uploads are allowed.'));
-      return;
+    if (!userCode) {
+      return res.status(400).json({ error: 'User code is required.' });
     }
-    cb(null, true);
-  },
+
+    const user = await User.findOne({ userCode }).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    return res.json({
+      user: mapUserResponse(user),
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to fetch profile.' });
+  }
 });
 
-// GET user profile by ID
+// GET user profile by username
+router.get('/username/:username', async (req, res) => {
+  try {
+    const username = String(req.params.username || '').trim().toLowerCase();
+
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required.' });
+    }
+
+    const user = await User.findOne({ username }).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    return res.json({
+      user: mapUserResponse(user),
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to fetch profile.' });
+  }
+});
 router.get('/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -182,7 +226,8 @@ router.post('/photo', verifyToken, upload.single('photo'), async (req, res) => {
       return res.status(400).json({ error: 'Photo file is required.' });
     }
 
-    const avatar = `${req.protocol}://${req.get('host')}/uploads/profile/${req.file.filename}`;
+    // Use Cloudinary URL
+    const avatar = req.file.path || req.file.secure_url;
 
     const user = await User.findByIdAndUpdate(req.userId, { avatar }, { new: true }).select('-password');
 
@@ -226,6 +271,58 @@ router.put('/stats', verifyToken, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to update stats.' });
+  }
+});
+
+// BLOCK a user (requires token)
+router.post('/block/:blockedUserId', verifyToken, async (req, res) => {
+  try {
+    const { blockedUserId } = req.params;
+
+    if (blockedUserId === req.userId) {
+      return res.status(400).json({ error: 'You cannot block yourself.' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    if (user.blockedUsers.includes(blockedUserId)) {
+      return res.status(400).json({ error: 'This user is already blocked.' });
+    }
+
+    user.blockedUsers.push(blockedUserId);
+    await user.save();
+
+    return res.json({
+      message: 'User blocked successfully.',
+      blockedUsers: user.blockedUsers,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to block user.' });
+  }
+});
+
+// UNBLOCK a user (requires token)
+router.post('/unblock/:blockedUserId', verifyToken, async (req, res) => {
+  try {
+    const { blockedUserId } = req.params;
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    user.blockedUsers = user.blockedUsers.filter((id) => id.toString() !== blockedUserId);
+    await user.save();
+
+    return res.json({
+      message: 'User unblocked successfully.',
+      blockedUsers: user.blockedUsers,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to unblock user.' });
   }
 });
 

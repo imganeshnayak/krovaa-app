@@ -493,6 +493,12 @@ export default function ProfileScreen() {
           )}
           {!!profile.phoneNumber && <Text style={styles.subInfo}>{profile.phoneNumber}</Text>}
           <Text style={styles.email}>{profile.email}</Text>
+          {profile.userCode && (
+            <View style={styles.userCodeBadge}>
+              <Text style={styles.userCodeLabel}>Your Code</Text>
+              <Text style={styles.userCodeText}>{profile.userCode}</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -1279,5 +1285,29 @@ const styles = StyleSheet.create({
     color: Colors.gray700,
     fontSize: FontSizes.md,
     fontWeight: FontWeights.semiBold as any,
+  },
+  userCodeBadge: {
+    marginTop: Spacing.lg,
+    backgroundColor: Colors.primary + '10',
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+    alignItems: 'center',
+  },
+  userCodeLabel: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray600,
+    fontWeight: FontWeights.medium as any,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  userCodeText: {
+    fontSize: FontSizes.lg,
+    color: Colors.primary,
+    fontWeight: FontWeights.bold as any,
+    letterSpacing: 1.5,
   },
 });

@@ -19,6 +19,7 @@ import { sendRegistrationOtp, verifyRegistrationOtp } from '@/lib/authApi';
 export default function RegisterScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [retypePassword, setRetypePassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -37,6 +38,17 @@ export default function RegisterScreen() {
       return;
     }
 
+    if (!username.trim()) {
+      setError('Please choose a username');
+      return;
+    }
+
+    const normalizedUsername = username.trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(normalizedUsername)) {
+      setError('Username must be 3 to 20 characters and use only letters, numbers, or underscores.');
+      return;
+    }
+
     if (password !== retypePassword) {
       setError('Passwords do not match.');
       return;
@@ -49,7 +61,7 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      const { error } = await sendRegistrationOtp(email, password, retypePassword);
+      const { error } = await sendRegistrationOtp(email, normalizedUsername, password, retypePassword);
       if (error) {
         setError(error);
         return;
@@ -150,6 +162,14 @@ export default function RegisterScreen() {
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
+            />
+
+            <Input
+              label="Username"
+              placeholder="Choose a unique username"
+              value={username}
+              onChangeText={(text) => setUsername(text.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
+              autoCapitalize="none"
             />
 
             {/* Password Field with Eye Toggle */}
