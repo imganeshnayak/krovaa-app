@@ -160,52 +160,65 @@ export default function ChatDetailScreen() {
     let mounted = true;
 
     async function loadConversation() {
-      if (!conversationId || !session?.access_token) {
+      try {
+        if (!conversationId || !session?.access_token) {
+          if (mounted) {
+            setLoading(false);
+            setError('No authentication token available.');
+          }
+          return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        const [
+          convoResult,
+          msgResult,
+          profileResult,
+        ] = await Promise.all([
+          getConversations(session.access_token),
+          getConversationMessages(session.access_token, conversationId),
+          getCurrentUserProfile(session.access_token),
+        ]);
+
+        if (!mounted) {
+          return;
+        }
+
+        if (profileResult?.data?.user?.blockedUsers) {
+          setBlockedUsers(profileResult.data.user.blockedUsers);
+        }
+
+        const conversationData = convoResult?.data;
+        const conversationError = convoResult?.error;
+        const messageData = msgResult?.data;
+        const messageError = msgResult?.error;
+
+        if (conversationError || !conversationData) {
+          setConversation(null);
+          setMessages([]);
+          setError(conversationError || 'Unable to load chat.');
+        } else {
+          const activeConversation = conversationData?.conversations?.find((item) => item.id === conversationId) ?? null;
+          setConversation(activeConversation);
+        }
+
+        if (messageError || !messageData) {
+          setMessages([]);
+          setError((previousError) => previousError ?? messageError ?? null);
+        } else {
+          setMessages(messageData.messages);
+        }
+      } catch (err: any) {
+        if (mounted) {
+          setError(err?.message || 'An unexpected error occurred while loading chat.');
+        }
+      } finally {
         if (mounted) {
           setLoading(false);
-          setError('No authentication token available.');
         }
-        return;
       }
-
-      setLoading(true);
-      setError(null);
-
-      const [
-        { data: conversationData, error: conversationError },
-        { data: messageData, error: messageError },
-        profileResult,
-      ] = await Promise.all([
-        getConversations(session.access_token),
-        getConversationMessages(session.access_token, conversationId),
-        getCurrentUserProfile(session.access_token),
-      ]);
-
-      if (!mounted) {
-        return;
-      }
-
-      if (profileResult?.data?.user?.blockedUsers) {
-        setBlockedUsers(profileResult.data.user.blockedUsers);
-      }
-
-      if (conversationError || !conversationData) {
-        setConversation(null);
-        setMessages([]);
-        setError(conversationError || 'Unable to load chat.');
-      } else {
-        const activeConversation = conversationData.conversations.find((item) => item.id === conversationId) ?? null;
-        setConversation(activeConversation);
-      }
-
-      if (messageError || !messageData) {
-        setMessages([]);
-        setError((previousError) => previousError ?? messageError ?? null);
-      } else {
-        setMessages(messageData.messages);
-      }
-
-      setLoading(false);
     }
 
     loadConversation();

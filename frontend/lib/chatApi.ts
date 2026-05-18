@@ -98,38 +98,46 @@ function normalizeMessage(message: RawMessage): ChatMessage {
 }
 
 async function authGet<T>(token: string, path: string) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  const data = (await response.json()) as { error?: string } & T;
+    const data = (await response.json()) as { error?: string } & T;
 
-  if (!response.ok) {
-    return { data: null, error: data.error || 'Something went wrong.' };
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Something went wrong.' };
+    }
+
+    return { data: data as T, error: null };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
   }
-
-  return { data: data as T, error: null };
 }
 
 async function authPost<T>(token: string, path: string, body: Record<string, unknown>) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
 
-  const data = (await response.json()) as { error?: string } & T;
+    const data = (await response.json()) as { error?: string } & T;
 
-  if (!response.ok) {
-    return { data: null, error: data.error || 'Something went wrong.' };
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Something went wrong.' };
+    }
+
+    return { data: data as T, error: null };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
   }
-
-  return { data: data as T, error: null };
 }
 
 export async function getConversations(token: string) {

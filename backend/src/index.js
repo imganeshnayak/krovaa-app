@@ -153,7 +153,7 @@ async function startServer() {
     });
   });
 
-  server.listen(port, () => {
+  server.listen(port, '0.0.0.0', () => {
     console.log(`Backend server listening on port ${port} with Socket.IO`);
   });
 }
