@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Modal, FlatList, Image, ActivityIndicator, Alert
 } from 'react-native';
-import { Search, Plus, MapPin, Clock, DollarSign, Briefcase, ListFilter as Filter, X, ChevronDown } from 'lucide-react-native';
+import { Search, Plus, MapPin, Clock, IndianRupee, Briefcase, ListFilter as Filter, X, ChevronDown } from 'lucide-react-native';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
@@ -187,7 +187,7 @@ export default function JobsScreen() {
       </View>
       <View style={styles.jobMeta}>
         <View style={styles.jobMetaItem}>
-          <DollarSign size={14} color={Colors.secondary} />
+          <IndianRupee size={14} color={Colors.secondary} />
           <Text style={styles.jobMetaText}>{item.budget}</Text>
         </View>
         <View style={styles.jobMetaItem}>
@@ -333,7 +333,7 @@ export default function JobsScreen() {
               <Text style={styles.inputLabel}>Budget Range</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="e.g. $500 - $1,000"
+                placeholder="e.g. ₹500 - ₹1,000"
                 placeholderTextColor={Colors.gray400}
                 value={postBudget}
                 onChangeText={setPostBudget}
