@@ -24,6 +24,10 @@ const messageSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    clientMessageId: {
+      type: String,
+      default: '',
+    },
     attachments: [attachmentSchema],
     readBy: [
       {
@@ -34,5 +38,7 @@ const messageSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+messageSchema.path('readBy').default([]);
 
 export default mongoose.model('Message', messageSchema);

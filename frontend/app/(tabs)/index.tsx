@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   View,
@@ -13,6 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Search, ArrowLeft, MessageSquare, User, Clock } from 'lucide-react-native';
 import { io, type Socket } from 'socket.io-client';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
@@ -55,6 +56,26 @@ export default function ChatScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchedChats, setSearchedChats] = useState<ChatConversation[]>([]);
   const [searchedMessages, setSearchedMessages] = useState<any[]>([]);
+  const currentUserId = session?.user.id;
+
+  const refreshConversations = useCallback(async () => {
+    if (!session?.access_token) {
+      return;
+    }
+
+    const { data, error: fetchError } = await getConversations(session.access_token);
+    if (fetchError || !data) {
+      return;
+    }
+
+    setConversations(data.conversations);
+  }, [session?.access_token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshConversations();
+    }, [refreshConversations])
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -108,12 +129,35 @@ export default function ChatScreen() {
 
     socketRef.current = socket;
 
-    socket.on('conversationUpdate', (update: { id: string; lastMessage: string; lastMessageAt: string }) => {
+    socket.on('conversationUpdate', () => {
+      refreshConversations();
+    });
+
+    socket.on('conversationRead', () => {
+      refreshConversations();
+    });
+
+    socket.on('messageDeleted', () => {
+      refreshConversations();
+    });
+
+    socket.on('message', (message: any) => {
+      const senderId = message?.sender?.id ?? message?.sender?._id ?? message?.sender;
+      if (String(senderId) === String(currentUserId)) {
+        refreshConversations();
+        return;
+      }
+
       setConversations((prevConversations) =>
         prevConversations
           .map((convo) =>
-            convo.id === update.id
-              ? { ...convo, lastMessage: update.lastMessage, lastMessageAt: update.lastMessageAt }
+            convo.id === message.conversation
+              ? {
+                  ...convo,
+                  unreadCount: (convo.unreadCount ?? 0) + 1,
+                  lastMessage: message.text ?? convo.lastMessage,
+                  lastMessageAt: message.createdAt ?? convo.lastMessageAt,
+                }
               : convo
           )
           .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
@@ -124,7 +168,7 @@ export default function ChatScreen() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [session?.access_token]);
+  }, [currentUserId, refreshConversations, session?.access_token]);
 
   // Debounced search query for chats and messages
   useEffect(() => {
@@ -159,8 +203,6 @@ export default function ChatScreen() {
 
     return () => clearTimeout(timer);
   }, [searchQuery, session?.access_token]);
-
-  const currentUserId = session?.user.id;
 
   const normalizedSearchUsername = searchUsername.trim().toLowerCase();
 
@@ -266,6 +308,11 @@ export default function ChatScreen() {
             <Text style={styles.lastMessage} numberOfLines={1}>
               {item.lastMessage || 'No messages yet'}
             </Text>
+            {item.unreadCount && item.unreadCount > 0 ? (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{item.unreadCount > 99 ? '99+' : String(item.unreadCount)}</Text>
+              </View>
+            ) : null}
           </View>
           {previewParticipant?.username ? (
             <Text style={styles.chatCode}>@{previewParticipant.username}</Text>
@@ -564,6 +611,21 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.xs,
     color: Colors.gray500,
     letterSpacing: 0.4,
+  },
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: '#0ea5e9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.sm,
+  },
+  unreadBadgeText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '800',
   },
   emptyTitle: {
     fontSize: FontSizes.lg,

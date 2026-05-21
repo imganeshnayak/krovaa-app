@@ -31,6 +31,7 @@ type RawMessage = {
   attachments?: Array<{ url: string; type: 'image' | 'video' | 'file' }>;
   createdAt?: string;
   updatedAt?: string;
+  clientMessageId?: string;
 };
 
 export type ChatParticipant = {
@@ -49,6 +50,7 @@ export type ChatConversation = {
   lastMessageAt: string;
   createdAt?: string;
   updatedAt?: string;
+  unreadCount?: number;
 };
 
 export type ChatMessage = {
@@ -59,6 +61,7 @@ export type ChatMessage = {
   attachments: Array<{ url: string; type: 'image' | 'video' | 'file' }>;
   createdAt: string;
   updatedAt?: string;
+  clientMessageId?: string;
 };
 
 function normalizeParticipant(participant: RawParticipant | undefined): ChatParticipant {
@@ -82,6 +85,7 @@ function normalizeConversation(conversation: RawConversation): ChatConversation 
     lastMessageAt: conversation.lastMessageAt ?? conversation.updatedAt ?? conversation.createdAt ?? '',
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
+    unreadCount: (conversation as any).unreadCount ? Number((conversation as any).unreadCount) : 0,
   };
 }
 
@@ -94,6 +98,7 @@ function normalizeMessage(message: RawMessage): ChatMessage {
     attachments: message.attachments ?? [],
     createdAt: message.createdAt ?? '',
     updatedAt: message.updatedAt,
+    clientMessageId: message.clientMessageId,
   };
 }
 
@@ -126,6 +131,27 @@ async function authPost<T>(token: string, path: string, body: Record<string, unk
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
+    });
+
+    const data = (await response.json()) as { error?: string } & T;
+
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Something went wrong.' };
+    }
+
+    return { data: data as T, error: null };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
+async function authDelete<T>(token: string, path: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
 
     const data = (await response.json()) as { error?: string } & T;
@@ -173,6 +199,21 @@ export async function createConversationWithUserId(token: string, userId: string
     data: result.data ? { conversation: normalizeConversation(result.data.conversation) } : null,
     error: result.error,
   };
+}
+
+export async function markConversationRead(token: string, conversationId: string) {
+  const result = await authPost<{ success: boolean; unreadCount?: number }>(token, `/api/chats/conversations/${conversationId}/read`, {});
+  return { data: result.data ?? null, error: result.error };
+}
+
+export async function deleteMessage(token: string, conversationId: string, messageId: string) {
+  const result = await authDelete<{ success: boolean }>(token, `/api/chats/conversations/${conversationId}/messages/${messageId}`);
+  return { data: result.data ?? null, error: result.error };
+}
+
+export async function forwardMessage(token: string, conversationId: string, messageId: string, targetConversationId: string) {
+  const result = await authPost<{ message: RawMessage }>(token, `/api/chats/conversations/${conversationId}/messages/${messageId}/forward`, { targetConversationId });
+  return { data: result.data ? { message: normalizeMessage(result.data.message) } : null, error: result.error };
 }
 
 export async function searchChatsAndMessages(token: string, query: string) {

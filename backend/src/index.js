@@ -33,6 +33,7 @@ function normalizeMessageForClient(message) {
     attachments: messageObject.attachments ?? [],
     createdAt: messageObject.createdAt,
     updatedAt: messageObject.updatedAt,
+    clientMessageId: messageObject.clientMessageId,
   };
 }
 
@@ -68,6 +69,9 @@ async function startServer() {
     },
   });
 
+  // Expose io to routes via the Express app so routes can emit socket events
+  app.set('io', io);
+
   // Socket auth middleware
   io.use((socket, next) => {
     try {
@@ -102,7 +106,7 @@ async function startServer() {
     // Handle sending messages
     socket.on('sendMessage', async (payload, ack) => {
       try {
-        const { conversationId, text, attachments = [] } = payload || {};
+        const { conversationId, text, attachments = [], clientMessageId } = payload || {};
         if (!conversationId) return ack && ack({ error: 'conversationId is required' });
 
         const convo = await Conversation.findById(conversationId);
@@ -116,6 +120,7 @@ async function startServer() {
           sender: userId,
           text: text || '',
           attachments,
+          clientMessageId,
         });
 
         convo.lastMessage = message.text || (attachments[0] && '[attachment]') || '';
@@ -124,6 +129,7 @@ async function startServer() {
 
         const populated = await message.populate('sender', 'fullName avatar email username userCode');
         const normalizedMessage = normalizeMessageForClient(populated);
+        normalizedMessage.clientMessageId = clientMessageId;
 
         // Emit to conversation room
         io.to(`conversation_${conversationId}`).emit('message', normalizedMessage);
