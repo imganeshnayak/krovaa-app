@@ -1,6 +1,6 @@
 # Krovaa Backend
 
-MongoDB-backed auth API for the Krovaa app.
+Prisma/PostgreSQL backend API for the Krovaa app.
 
 ## Environment
 
@@ -8,7 +8,7 @@ Create a `.env` file in this folder:
 
 ```bash
 PORT=4000
-MONGO_URI=mongodb://127.0.0.1:27017/krovaa
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/krovaa_chat?schema=public
 JWT_SECRET=replace-this-with-a-long-random-string
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -17,6 +17,8 @@ SMTP_PASS=your-app-password
 SMTP_FROM_EMAIL=ganeshnayak8175@gmail.com
 SMTP_FROM_NAME=Krovadotcom
 ```
+
+If you are using the bundled Postgres container, start it first with `docker compose up -d postgres` from the repository root.
 
 ## Run
 

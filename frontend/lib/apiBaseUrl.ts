@@ -2,7 +2,6 @@ import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 
 const DEFAULT_API_BASE_URL = Platform.select({
-  android: 'http://10.0.2.2:5000',
   ios: 'http://localhost:5000',
   web: 'http://localhost:5000',
   default: 'http://localhost:5000',
@@ -26,23 +25,15 @@ function isExpoTunnelHost(host: string) {
 }
 
 function normalizeApiUrl(value: string) {
-  return value.replace(/:\s+(\d+)/g, ':$1').trim();
-}
-
-function parseApiUrlOrNull(value: string) {
-  try {
-    return new URL(normalizeApiUrl(value));
-  } catch {
-    return null;
-  }
+  return value.replace(/:\s+(\d+)/g, ':$1').trim().replace(/\/+$/, '');
 }
 
 export function getApiBaseUrl() {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;
   if (fromEnv) {
-    const parsed = parseApiUrlOrNull(fromEnv);
-    if (parsed) {
-      return parsed.origin;
+    const sanitized = normalizeApiUrl(fromEnv);
+    if (sanitized) {
+      return sanitized;
     }
   }
 
@@ -56,7 +47,8 @@ export function getApiBaseUrl() {
     return `http://${expoHostIp}:5000`;
   }
 
-  return DEFAULT_API_BASE_URL;
+  return DEFAULT_API_BASE_URL ?? 'http://localhost:5000';
 }
 
 export const API_BASE_URL = getApiBaseUrl();
+console.log('[API] Initialized API_BASE_URL as:', API_BASE_URL);
