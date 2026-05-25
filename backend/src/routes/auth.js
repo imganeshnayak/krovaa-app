@@ -1,7 +1,8 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
-import User from '../models/User.js';
+import User, { hashPassword, comparePassword } from '../models/User.js';
+import { prisma } from '../config/db.js';
 
 const router = express.Router();
 const pendingRegistrations = new Map();
@@ -16,7 +17,7 @@ function createToken(user) {
     throw new Error('JWT_SECRET is not defined');
   }
 
-  return jwt.sign({ id: user._id.toString(), email: user.email }, secret, {
+  return jwt.sign({ id: user.id, email: user.email }, secret, {
     expiresIn: '30d',
   });
 }
@@ -25,7 +26,7 @@ function getUserResponse(user, token) {
   return {
     token,
     user: {
-      id: user._id.toString(),
+      id: String(user.id),
       email: user.email,
       username: user.username,
       userCode: user.userCode,
@@ -49,16 +50,21 @@ function generateUserCode() {
 }
 
 async function createUserWithUniqueCode(userData) {
+  const hashedPassword = await hashPassword(userData.password);
+
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const userCode = generateUserCode();
 
     try {
       return await User.create({
-        ...userData,
-        userCode,
+        data: {
+          ...userData,
+          password: hashedPassword,
+          userCode,
+        },
       });
     } catch (error) {
-      if (error?.code !== 11000 || !error?.keyPattern?.userCode) {
+      if (error.code !== 'P2002' || !error.meta?.target?.includes('userCode')) {
         throw error;
       }
     }
@@ -143,12 +149,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Username must be 3 to 20 characters and use only letters, numbers, or underscores.' });
     }
 
-    const existingUser = await User.findOne({ email: normalizedEmail });
+    const existingUser = await User.findUnique({ where: { email: normalizedEmail } });
     if (existingUser) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
-    const existingUsername = await User.findOne({ username: normalizedUsername });
+    const existingUsername = await User.findUnique({ where: { username: normalizedUsername } });
     if (existingUsername) {
       return res.status(409).json({ error: 'This username is already taken.' });
     }
@@ -192,12 +198,12 @@ router.post('/register/send-otp', async (req, res) => {
       return res.status(400).json({ error: 'Username must be 3 to 20 characters and use only letters, numbers, or underscores.' });
     }
 
-    const existingUser = await User.findOne({ email: normalizedEmail });
+    const existingUser = await User.findUnique({ where: { email: normalizedEmail } });
     if (existingUser) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
-    const existingUsername = await User.findOne({ username: normalizedUsername });
+    const existingUsername = await User.findUnique({ where: { username: normalizedUsername } });
     if (existingUsername) {
       return res.status(409).json({ error: 'This username is already taken.' });
     }
@@ -250,13 +256,13 @@ router.post('/register/verify-otp', async (req, res) => {
       return res.status(400).json({ error: 'Invalid OTP.' });
     }
 
-    const existingUser = await User.findOne({ email: normalizedEmail });
+    const existingUser = await User.findUnique({ where: { email: normalizedEmail } });
     if (existingUser) {
       pendingRegistrations.delete(normalizedEmail);
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
-    const existingUsername = await User.findOne({ username: pending.username });
+    const existingUsername = await User.findUnique({ where: { username: pending.username } });
     if (existingUsername) {
       pendingRegistrations.delete(normalizedEmail);
       return res.status(409).json({ error: 'This username is already taken.' });
@@ -288,12 +294,12 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findUnique({ where: { email: email.toLowerCase() } });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const isPasswordValid = await user.comparePassword(password);
+    const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }

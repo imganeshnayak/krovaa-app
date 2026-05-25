@@ -12,27 +12,37 @@ import { Server as IOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import Conversation from './models/Conversation.js';
 import Message from './models/Message.js';
+import { prisma } from './config/db.js';
 
-function normalizeMessageForClient(message) {
-  const messageObject = typeof message?.toObject === 'function' ? message.toObject() : message;
-
+function normalizeMessageForClient(message, sender) {
   return {
-    id: String(messageObject._id ?? messageObject.id ?? ''),
-    conversation: String(messageObject.conversation ?? ''),
-    sender: messageObject.sender
+    id: String(message.id),
+    conversation: String(message.conversationId),
+    sender: sender
       ? {
-          id: String(messageObject.sender._id ?? messageObject.sender.id ?? messageObject.sender),
-          fullName: messageObject.sender.fullName,
-          avatar: messageObject.sender.avatar,
-          email: messageObject.sender.email,
-          username: messageObject.sender.username,
-          userCode: messageObject.sender.userCode,
+          id: String(sender.id),
+          fullName: sender.fullName,
+          avatar: sender.avatar,
+          email: sender.email,
+          username: sender.username,
+          userCode: sender.userCode,
         }
       : undefined,
-    text: messageObject.text ?? '',
-    attachments: messageObject.attachments ?? [],
-    createdAt: messageObject.createdAt,
-    updatedAt: messageObject.updatedAt,
+    text: message.text ?? '',
+    attachments: JSON.parse(message.attachments || '[]'),
+    createdAt: message.createdAt,
+    updatedAt: message.updatedAt,
+    clientMessageId: message.clientMessageId,
+    replyTo: message.replyToId
+      ? {
+          id: String(message.replyToId),
+          text: '',
+          sender: null,
+          attachments: [],
+        }
+      : null,
+    isForwarded: message.isForwarded || false,
+    forwardedFrom: message.forwardedFrom || null,
   };
 }
 
@@ -68,7 +78,8 @@ async function startServer() {
     },
   });
 
-  // Socket auth middleware
+  app.set('io', io);
+
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth?.token || socket.handshake.query?.token;
@@ -76,7 +87,11 @@ async function startServer() {
       const secret = process.env.JWT_SECRET;
       if (!secret) return next(new Error('Authentication error: JWT_SECRET not set'));
       const decoded = jwt.verify(token, secret);
-      socket.userId = decoded.id;
+      const parsedId = parseInt(decoded.id, 10);
+      if (Number.isNaN(parsedId)) {
+        return next(new Error('Authentication error: invalid token payload'));
+      }
+      socket.userId = parsedId;
       return next();
     } catch (err) {
       return next(new Error('Authentication error'));
@@ -87,10 +102,8 @@ async function startServer() {
     const userId = socket.userId;
     console.log('Socket connected:', socket.id, 'user:', userId);
 
-    // Join a personal room for direct events
     socket.join(`user_${userId}`);
 
-    // Join conversation room
     socket.on('join', (conversationId) => {
       socket.join(`conversation_${conversationId}`);
     });
@@ -99,45 +112,58 @@ async function startServer() {
       socket.leave(`conversation_${conversationId}`);
     });
 
-    // Handle sending messages
     socket.on('sendMessage', async (payload, ack) => {
       try {
-        const { conversationId, text, attachments = [] } = payload || {};
+        const { conversationId, text, attachments = [], clientMessageId, replyTo } = payload || {};
         if (!conversationId) return ack && ack({ error: 'conversationId is required' });
 
-        const convo = await Conversation.findById(conversationId);
+        const convo = await Conversation.findUnique({
+          where: { id: parseInt(conversationId) },
+          include: { participants: true },
+        });
         if (!convo) return ack && ack({ error: 'Conversation not found' });
-        if (!convo.participants.map(String).includes(String(userId))) {
+        if (!convo.participants.some((p) => p.userId === userId)) {
           return ack && ack({ error: 'Not a participant' });
         }
 
-        const message = await Message.create({
-          conversation: conversationId,
-          sender: userId,
+        const messageData = {
+          conversationId: convo.id,
+          senderId: userId,
           text: text || '',
-          attachments,
+          attachments: JSON.stringify(attachments),
+          clientMessageId,
+        };
+
+        if (replyTo) {
+          messageData.replyToId = parseInt(replyTo);
+        }
+
+        const message = await Message.create({
+          data: messageData,
+          include: { sender: true },
         });
 
-        convo.lastMessage = message.text || (attachments[0] && '[attachment]') || '';
-        convo.lastMessageAt = new Date();
-        await convo.save();
+        await Conversation.update({
+          where: { id: convo.id },
+          data: {
+            lastMessage: message.text || (attachments[0] && '[attachment]') || '',
+            lastMessageAt: new Date(),
+          },
+        });
 
-        const populated = await message.populate('sender', 'fullName avatar email username userCode');
-        const normalizedMessage = normalizeMessageForClient(populated);
+        const normalizedMessage = normalizeMessageForClient(message, message.sender);
+        normalizedMessage.clientMessageId = clientMessageId;
 
-        // Emit to conversation room
         io.to(`conversation_${conversationId}`).emit('message', normalizedMessage);
 
-        // Emit conversation update to all participants so chat list refreshes
-        convo.participants.forEach((participantId) => {
-          io.to(`user_${participantId}`).emit('conversationUpdate', {
-            id: String(convo._id),
-            lastMessage: convo.lastMessage,
-            lastMessageAt: convo.lastMessageAt,
+        convo.participants.forEach((participant) => {
+          io.to(`user_${participant.userId}`).emit('conversationUpdate', {
+            id: String(convo.id),
+            lastMessage: message.text || (attachments[0] && '[attachment]') || '',
+            lastMessageAt: message.createdAt,
           });
         });
 
-        // Optionally ack back to sender
         ack && ack({ message: normalizedMessage });
       } catch (error) {
         console.error('sendMessage error', error);
