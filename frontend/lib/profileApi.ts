@@ -4,7 +4,6 @@ export interface UserProfile {
   id: string;
   email: string;
   username: string;
-  userCode: string;
   fullName: string;
   location: string;
   city: string;
@@ -179,14 +178,22 @@ export async function updateUserStats(
   return authRequest<StatsResponse>('/api/profile/stats', 'PUT', token, updates);
 }
 
+function getMimeType(uri: string): string {
+  const ext = uri.split('.').pop()?.toLowerCase() || '';
+  const map: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
+  return map[ext] || 'image/jpeg';
+}
+
 export async function uploadProfilePhoto(token: string, photoUri: string) {
   const url = `${API_BASE_URL}/api/profile/photo`;
   const formData = new FormData();
+  const mimeType = getMimeType(photoUri);
+  const ext = photoUri.split('.').pop()?.toLowerCase() || 'jpg';
 
   formData.append('photo', {
     uri: photoUri,
-    name: `profile-${Date.now()}.jpg`,
-    type: 'image/jpeg',
+    name: `profile-${Date.now()}.${ext}`,
+    type: mimeType,
   } as any);
 
   try {
@@ -213,11 +220,13 @@ export async function uploadProfilePhoto(token: string, photoUri: string) {
 export async function uploadCoverPhoto(token: string, photoUri: string) {
   const url = `${API_BASE_URL}/api/profile/cover-photo`;
   const formData = new FormData();
+  const mimeType = getMimeType(photoUri);
+  const ext = photoUri.split('.').pop()?.toLowerCase() || 'jpg';
 
   formData.append('photo', {
     uri: photoUri,
-    name: `cover-${Date.now()}.jpg`,
-    type: 'image/jpeg',
+    name: `cover-${Date.now()}.${ext}`,
+    type: mimeType,
   } as any);
 
   try {
