@@ -43,7 +43,7 @@ function mapJobResponse(job, currentUserId, applicants, user) {
 }
 
 function buildJobFilter(queryParams) {
-  const { mode, location, q, category, posterId } = queryParams;
+  const { mode, location, q, category, posterId, excludePosterId } = queryParams;
   const filter = {};
   const conditions = [];
 
@@ -83,6 +83,13 @@ function buildJobFilter(queryParams) {
     const pid = parseInt(posterId, 10);
     if (!Number.isNaN(pid)) {
       conditions.push({ userId: pid });
+    }
+  }
+
+  if (excludePosterId) {
+    const pid = parseInt(excludePosterId, 10);
+    if (!Number.isNaN(pid)) {
+      conditions.push({ userId: { not: pid } });
     }
   }
 
@@ -163,6 +170,36 @@ router.get('/my', verifyToken, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to fetch your listings.' });
+  }
+});
+
+router.get('/applied', verifyToken, async (req, res) => {
+  try {
+    const applications = await prisma.jobApplication.findMany({
+      where: { userId: req.userId },
+      include: {
+        job: {
+          include: {
+            user: {
+              select: { id: true, fullName: true, avatar: true, email: true, username: true },
+            },
+            applications: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json({
+      jobs: applications.map((app) => ({
+        ...mapJobResponse(app.job, req.userId, app.job.applications, app.job.user),
+        applicationStatus: app.status,
+        applicationId: String(app.id),
+        appliedAt: app.createdAt,
+      })),
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to fetch applied jobs.' });
   }
 });
 
@@ -367,6 +404,29 @@ router.post('/:jobId/apply', verifyToken, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to apply for job.' });
+  }
+});
+
+router.post('/:jobId/withdraw', verifyToken, async (req, res) => {
+  try {
+    const jobId = parseInt(req.params.jobId);
+    const application = await prisma.jobApplication.findUnique({
+      where: {
+        jobId_userId: { jobId, userId: req.userId },
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found.' });
+    }
+
+    await prisma.jobApplication.delete({
+      where: { id: application.id },
+    });
+
+    return res.json({ message: 'Application withdrawn successfully.' });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to withdraw application.' });
   }
 });
 
