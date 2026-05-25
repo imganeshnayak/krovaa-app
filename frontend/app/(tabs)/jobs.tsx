@@ -8,14 +8,16 @@ import {
   Search, MapPin, IndianRupee, Briefcase, X, Plus,
   List, ChevronDown, Clock, Building2,
   GraduationCap, Wifi, Home, Globe, User,
-  Pencil, Trash2,
+  Pencil, Trash2, ArrowLeft, Send, Eye, MessageCircle,
+  CheckCircle, XCircle, Clock as Hourglass,
 } from 'lucide-react-native';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import {
   getJobs, postJob, applyJob, getMyJobs, deleteJob, updateJob,
-  type Job,
+  getAppliedJobs, withdrawApplication, getJobApplicants,
+  type Job, type AppliedJob, type JobApplicant,
 } from '@/lib/jobsApi';
 
 const JOB_CATEGORIES = ['All', 'Design', 'Development', 'Marketing', 'Writing', 'Video'];
@@ -52,8 +54,17 @@ export default function JobsScreen() {
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
   const [showMyListings, setShowMyListings] = useState(false);
+  const [myListingsTab, setMyListingsTab] = useState<'applicants' | 'applied'>('applicants');
   const [myJobs, setMyJobs] = useState<Job[]>([]);
   const [myJobsLoading, setMyJobsLoading] = useState(false);
+  const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([]);
+  const [appliedJobsLoading, setAppliedJobsLoading] = useState(false);
+
+  // Applicants dashboard
+  const [showApplicantsDashboard, setShowApplicantsDashboard] = useState(false);
+  const [dashboardJob, setDashboardJob] = useState<Job | null>(null);
+  const [dashboardApplicants, setDashboardApplicants] = useState<JobApplicant[]>([]);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
 
   // Post form
   const [postTitle, setPostTitle] = useState('');
@@ -100,6 +111,7 @@ export default function JobsScreen() {
       q: debouncedSearchQuery || undefined,
       location: debouncedLocationQuery || undefined,
       mode: selectedMode,
+      excludePosterId: session?.user?.id,
     });
 
     if (fetchError) {
@@ -109,7 +121,7 @@ export default function JobsScreen() {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [session?.access_token, selectedCategory, debouncedSearchQuery, debouncedLocationQuery, selectedMode]);
+  }, [session?.access_token, session?.user?.id, selectedCategory, debouncedSearchQuery, debouncedLocationQuery, selectedMode]);
 
   useEffect(() => {
     fetchJobs(true);
@@ -226,10 +238,17 @@ export default function JobsScreen() {
   const openMyListings = async () => {
     if (!session?.access_token) return;
     setShowMyListings(true);
+    setMyListingsTab('applicants');
     setMyJobsLoading(true);
-    const { data } = await getMyJobs(session.access_token);
-    if (data) setMyJobs(data);
+    setAppliedJobsLoading(true);
+    const [myResult, appliedResult] = await Promise.all([
+      getMyJobs(session.access_token),
+      getAppliedJobs(session.access_token),
+    ]);
+    if (myResult.data) setMyJobs(myResult.data);
+    if (appliedResult.data) setAppliedJobs(appliedResult.data);
     setMyJobsLoading(false);
+    setAppliedJobsLoading(false);
   };
 
   const handleDeleteMyJob = (job: Job) => {

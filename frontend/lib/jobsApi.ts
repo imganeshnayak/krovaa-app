@@ -17,6 +17,12 @@ export type Job = {
   applicantCount: number;
 };
 
+export type AppliedJob = Job & {
+  applicationStatus: 'pending' | 'viewed' | 'shortlisted' | 'accepted' | 'rejected';
+  applicationId: string;
+  appliedAt: string;
+};
+
 export async function getJobs(
   token?: string,
   filters?: {
@@ -24,6 +30,7 @@ export async function getJobs(
     q?: string;
     location?: string;
     mode?: string;
+    excludePosterId?: string;
   }
 ) {
   try {
@@ -39,6 +46,9 @@ export async function getJobs(
     }
     if (filters?.mode && filters.mode !== 'ALL_MODES') {
       params.append('mode', filters.mode);
+    }
+    if (filters?.excludePosterId) {
+      params.append('excludePosterId', filters.excludePosterId);
     }
 
     const queryString = params.toString();
@@ -77,6 +87,41 @@ export async function getMyJobs(token: string) {
     return { data: data.jobs as Job[], error: null };
   } catch (error: any) {
     return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
+export async function getAppliedJobs(token: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/jobs/applied`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Failed to fetch applied jobs' };
+    }
+
+    return { data: data.jobs as AppliedJob[], error: null };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
+export async function withdrawApplication(token: string, jobId: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}/withdraw`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { error: data.error || 'Failed to withdraw application' };
+    }
+
+    return { error: null };
+  } catch (error: any) {
+    return { error: error?.message || 'Network request failed' };
   }
 }
 

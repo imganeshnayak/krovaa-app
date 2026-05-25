@@ -208,6 +208,7 @@ export default function ProfileScreen() {
   const [editLoading, setEditLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [photoPickerTarget, setPhotoPickerTarget] = useState<'avatar' | 'cover' | null>(null);
   const [postsLoading, setPostsLoading] = useState(true);
   const [postUploading, setPostUploading] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
@@ -241,6 +242,7 @@ export default function ProfileScreen() {
 
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const sheetAnim = useRef(new Animated.Value(0)).current;
 
   const { width } = useWindowDimensions();
   const isTablet = width >= 700;
@@ -402,6 +404,19 @@ export default function ProfileScreen() {
     }
   }, [loading, profile, error, fadeAnim]);
 
+  useEffect(() => {
+    if (photoPickerTarget !== null) {
+      Animated.spring(sheetAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      sheetAnim.setValue(0);
+    }
+  }, [photoPickerTarget, sheetAnim]);
+
   const handleOpenEditModal = () => {
     if (profile) {
       let selectedCategory = '';
@@ -504,6 +519,53 @@ export default function ProfileScreen() {
         }
       } catch { setEditError('Failed to upload cover photo.'); }
       finally { setPhotoUploading(false); }
+    }
+  };
+
+  const handlePhotoPickerOption = async (option: 'camera' | 'gallery' | 'remove') => {
+    if (!photoPickerTarget) return;
+    setPhotoPickerTarget(null);
+    if (option === 'camera') {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (permission.status !== 'granted') { setEditError('Camera permission is required.'); return; }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: photoPickerTarget === 'avatar' ? [1, 1] : [16, 9],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        const pickedUri = result.assets[0].uri;
+        if (photoPickerTarget === 'avatar') {
+          setLocalAvatarPreview(pickedUri);
+          setEditForm((prev) => ({ ...prev, avatar: pickedUri }));
+        } else {
+          setLocalCoverPreview(pickedUri);
+          setEditForm((prev) => ({ ...prev, coverPhoto: pickedUri }));
+        }
+        setPhotoUploading(true); setEditError(null);
+        try {
+          const uploadFn = photoPickerTarget === 'avatar' ? uploadProfilePhoto : uploadCoverPhoto;
+          const { data, error: uploadError } = await uploadFn(session!.access_token, pickedUri);
+          if (uploadError) { setEditError(uploadError); return; }
+          if (photoPickerTarget === 'avatar' && data?.user?.avatar) {
+            setEditForm((prev) => ({ ...prev, avatar: data.user.avatar }));
+            setProfile((prev) => (prev ? { ...prev, avatar: data.user.avatar } : prev));
+            setLocalAvatarPreview(null);
+          }
+          if (photoPickerTarget === 'cover' && data?.user?.coverPhotoUrl !== undefined) {
+            setEditForm((prev) => ({ ...prev, coverPhoto: data.user.coverPhotoUrl || '' }));
+            setProfile((prev) => (prev ? { ...prev, coverPhotoUrl: data.user.coverPhotoUrl } : prev));
+            setLocalCoverPreview(null);
+          }
+        } catch { setEditError('Failed to upload photo.'); }
+        finally { setPhotoUploading(false); }
+      }
+    } else if (option === 'gallery') {
+      if (photoPickerTarget === 'avatar') await handlePickImage();
+      else await handlePickCoverPhoto();
+    } else if (option === 'remove') {
+      if (photoPickerTarget === 'avatar') await handleDeleteAvatar();
+      else await handleDeleteCoverPhoto();
     }
   };
 
@@ -1132,34 +1194,40 @@ export default function ProfileScreen() {
             )}
 
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              <View style={styles.photoSection}>
-                <Image
-                  source={{ uri: editForm.avatar || profile.avatar || 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200' }}
-                  style={styles.modalAvatar}
-                />
-                <View style={styles.photoActions}>
-                  <Button title="Upload Photo" onPress={handlePickImage} loading={photoUploading} variant="outline" style={{ flex: 1 }} />
-                  <TouchableOpacity onPress={handleDeleteAvatar} activeOpacity={0.7} style={styles.photoRemoveBtn}>
-                    <Trash2 size={16} color={Colors.error} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.photoSection}>
-                {editForm.coverPhoto ? (
-                  <Image source={{ uri: editForm.coverPhoto }} style={{ width: '100%', height: 150, borderRadius: BorderRadius.md }} />
-                ) : (
-                  <View style={{ width: '100%', height: 150, backgroundColor: Colors.gray100, borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center' }}>
-                    <Camera size={24} color={Colors.gray400} />
-                    <Text style={{ color: Colors.gray500, fontSize: FontSizes.sm, marginTop: 6 }}>Cover Photo</Text>
+              <View style={styles.editCoverWrap}>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => setPhotoPickerTarget('cover')}
+                  style={styles.editCoverTouch}
+                >
+                  {editForm.coverPhoto || profile?.coverPhotoUrl ? (
+                    <Image
+                      source={{ uri: editForm.coverPhoto || profile?.coverPhotoUrl || '' }}
+                      style={styles.editCoverImg}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.editCoverPlaceholder}>
+                      <Camera size={28} color={Colors.gray300} />
+                    </View>
+                  )}
+                  <View style={styles.editCoverOverlay}>
+                    <Camera size={18} color={Colors.white} />
                   </View>
-                )}
-                <View style={styles.photoActions}>
-                  <Button title="Upload Cover" onPress={handlePickCoverPhoto} loading={photoUploading} variant="outline" style={{ flex: 1 }} />
-                  <TouchableOpacity onPress={handleDeleteCoverPhoto} activeOpacity={0.7} style={styles.photoRemoveBtn}>
-                    <Trash2 size={16} color={Colors.error} />
-                  </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => setPhotoPickerTarget('avatar')}
+                  style={styles.editAvatarWrap}
+                >
+                  <Image
+                    source={{ uri: editForm.avatar || profile?.avatar || 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200' }}
+                    style={styles.editAvatarImg}
+                  />
+                  <View style={styles.editAvatarOverlay}>
+                    <Camera size={14} color={Colors.white} />
+                  </View>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.formSection}>
@@ -1317,6 +1385,46 @@ export default function ProfileScreen() {
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      {/* Photo picker bottom sheet */}
+      <Modal visible={photoPickerTarget !== null} transparent animationType="none" onRequestClose={() => {
+        Animated.timing(sheetAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+        setPhotoPickerTarget(null);
+      }}>
+        <Pressable style={styles.bottomSheetBackdrop} onPress={() => {
+          Animated.timing(sheetAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+          setPhotoPickerTarget(null);
+        }} />
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            { transform: [{ translateY: sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] }) }] },
+          ]}
+        >
+          <View style={styles.bottomSheetHandle} />
+          <Text style={styles.bottomSheetTitle}>
+            {photoPickerTarget === 'avatar' ? 'Profile Photo' : 'Cover Photo'}
+          </Text>
+          <TouchableOpacity style={styles.bottomSheetOption} onPress={() => handlePhotoPickerOption('camera')} activeOpacity={0.7}>
+            <Camera size={20} color={Colors.gray700} />
+            <Text style={styles.bottomSheetOptionText}>Take Photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.bottomSheetOption} onPress={() => handlePhotoPickerOption('gallery')} activeOpacity={0.7}>
+            <ImagePlus size={20} color={Colors.gray700} />
+            <Text style={styles.bottomSheetOptionText}>Choose from Gallery</Text>
+          </TouchableOpacity>
+          {((photoPickerTarget === 'avatar' && (editForm.avatar || profile?.avatar)) ||
+            (photoPickerTarget === 'cover' && (editForm.coverPhoto || profile?.coverPhotoUrl))) && (
+            <TouchableOpacity style={styles.bottomSheetOption} onPress={() => handlePhotoPickerOption('remove')} activeOpacity={0.7}>
+              <Trash2 size={20} color={Colors.error} />
+              <Text style={[styles.bottomSheetOptionText, { color: Colors.error }]}>Remove Current Photo</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.bottomSheetCancel} onPress={() => setPhotoPickerTarget(null)} activeOpacity={0.7}>
+            <Text style={styles.bottomSheetCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </Modal>
 
       {/* Post Modal */}
@@ -2151,31 +2259,128 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.semiBold as any,
   },
 
-  // Photos
-  photoSection: {
-    marginBottom: Spacing.lg,
-    gap: 12,
+  // Edit photo area - overlapping cover + avatar
+  editCoverWrap: {
+    position: 'relative',
+    marginBottom: 60,
+    marginHorizontal: -Spacing.lg,
   },
-  modalAvatar: {
-    width: 90,
-    height: 90,
-    borderRadius: BorderRadius.full,
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    alignSelf: 'center',
+  editCoverTouch: {
+    width: '100%',
+    height: 180,
+    overflow: 'hidden',
   },
-  photoActions: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
+  editCoverImg: {
+    width: '100%',
+    height: '100%',
   },
-  photoRemoveBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.md,
-    backgroundColor: '#FEE2E2',
+  editCoverPlaceholder: {
+    flex: 1,
+    backgroundColor: Colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  editCoverOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 12,
+  },
+  editAvatarWrap: {
+    position: 'absolute',
+    bottom: -40,
+    alignSelf: 'center',
+    borderRadius: BorderRadius.full,
+    borderWidth: 4,
+    borderColor: Colors.white,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  editAvatarImg: {
+    width: 96,
+    height: 96,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.gray200,
+  },
+  editAvatarOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 30,
+    height: 30,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2.5,
+    borderColor: Colors.white,
+  },
+
+  // Bottom sheet
+  bottomSheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  bottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: 40,
+    paddingTop: Spacing.sm,
+    elevation: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+  },
+  bottomSheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.gray300,
+    alignSelf: 'center',
+    marginBottom: Spacing.md,
+  },
+  bottomSheetTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  bottomSheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  bottomSheetOptionText: {
+    fontSize: FontSizes.md,
+    color: Colors.gray800,
+    fontWeight: FontWeights.medium as any,
+  },
+  bottomSheetCancel: {
+    marginTop: Spacing.sm,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.gray100,
+  },
+  bottomSheetCancelText: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray700,
   },
 
   // Social editor
