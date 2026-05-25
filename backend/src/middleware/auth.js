@@ -14,7 +14,12 @@ export function verifyToken(req, res, next) {
     }
 
     const decoded = jwt.verify(token, secret);
-    req.userId = decoded.id;
+    // Ensure userId is an integer because Prisma expects Int IDs
+    const parsedId = parseInt(decoded.id, 10);
+    if (Number.isNaN(parsedId)) {
+      return res.status(401).json({ error: 'Invalid token payload: id is not a number.' });
+    }
+    req.userId = parsedId;
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Invalid or expired token.' });

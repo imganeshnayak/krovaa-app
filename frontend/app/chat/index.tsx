@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { /*useFocusEffect*/ } from '@react-navigation/native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { io } from 'socket.io-client';
-import * as Haptics from 'expo-haptics';
 import { Archive } from 'lucide-react-native';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -102,7 +101,6 @@ export default function ChatListScreen() {
   const visibleConversations = conversations.filter((conversation) => !archivedConversationIds.includes(conversation.id));
 
   const markConversationUnread = (conversationId: string) => {
-    Haptics.selectionAsync().catch(() => null);
     setConversations((previous) =>
       previous.map((conversation) =>
         conversation.id === conversationId
@@ -113,7 +111,6 @@ export default function ChatListScreen() {
   };
 
   const archiveConversation = (conversationId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => null);
     setArchivedConversationIds((previous) => (previous.includes(conversationId) ? previous : [...previous, conversationId]));
   };
 

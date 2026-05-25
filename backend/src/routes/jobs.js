@@ -4,10 +4,10 @@ import User from '../models/User.js';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import { verifyToken } from '../middleware/auth.js';
+import { prisma } from '../config/db.js';
 
 const router = express.Router();
 
-// Get relative time (e.g. "2h ago")
 function getRelativeTime(date) {
   const now = new Date();
   const diffMs = now - new Date(date);
@@ -21,11 +21,9 @@ function getRelativeTime(date) {
   return `${diffDays}d ago`;
 }
 
-// Map database Job to client response
-function mapJobResponse(job, currentUserId) {
-  const poster = job.user || {};
+function mapJobResponse(job, currentUserId, applicants, user) {
   return {
-    id: job._id.toString(),
+    id: String(job.id),
     title: job.title,
     company: job.company,
     budget: job.budget,
@@ -33,63 +31,72 @@ function mapJobResponse(job, currentUserId) {
     type: job.type,
     description: job.description,
     posted: getRelativeTime(job.createdAt),
-    avatar: poster.avatar || 'https://images.pexels.com/photos/3183150/pexels-photo-3183150.jpeg?auto=compress&cs=tinysrgb&w=100',
-    posterId: poster._id ? poster._id.toString() : String(job.user),
-    posterName: poster.fullName || 'TechCorp',
-    hasApplied: currentUserId ? job.applicants.map(String).includes(String(currentUserId)) : false,
-    applicantCount: job.applicants.length,
+    avatar: user?.avatar || 'https://images.pexels.com/photos/3183150/pexels-photo-3183150.jpeg?auto=compress&cs=tinysrgb&w=100',
+    posterId: user ? String(user.id) : String(job.userId),
+    posterName: user?.fullName || 'TechCorp',
+    hasApplied: currentUserId ? applicants.some((a) => a.userId === currentUserId) : false,
+    applicantCount: applicants.length,
   };
 }
 
-// Fetch all jobs with filtering and search
 router.get('/', async (req, res) => {
   try {
     const { category, q } = req.query;
     const query = {};
 
-    // Filter by category
     if (category && category !== 'All') {
       query.type = category;
     }
 
-    // Filter by search query (title, company, or description)
     if (q) {
       const searchRegex = new RegExp(String(q).trim(), 'i');
-      query.$or = [
-        { title: searchRegex },
-        { company: searchRegex },
-        { description: searchRegex },
+      query.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { company: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
       ];
     }
 
-    const jobs = await Job.find(query)
-      .sort({ createdAt: -1 })
-      .populate('user', 'fullName avatar email username');
+    const jobs = await Job.findMany({
+      where: query,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatar: true,
+            email: true,
+            username: true,
+          },
+        },
+        applications: true,
+      },
+    });
 
     const authHeader = req.headers.authorization;
     let currentUserId = null;
 
-    // Optional user validation if token exists to mark "hasApplied"
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.split(' ')[1];
         const jwt = await import('jsonwebtoken');
         const decoded = jwt.default.verify(token, process.env.JWT_SECRET);
-        currentUserId = decoded.id;
+        const parsedId = parseInt(decoded.id, 10);
+        currentUserId = Number.isNaN(parsedId) ? null : parsedId;
       } catch (e) {
         // Ignore token errors for listing jobs
       }
     }
 
     return res.json({
-      jobs: jobs.map((job) => mapJobResponse(job, currentUserId)),
+      jobs: jobs.map((job) => mapJobResponse(job, currentUserId, job.applications, job.user)),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to fetch jobs.' });
   }
 });
 
-// Post a new job
 router.post('/', verifyToken, async (req, res) => {
   try {
     const { title, budget, location, type, description, company } = req.body;
@@ -98,7 +105,7 @@ router.post('/', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'All fields (title, budget, location, type, description) are required.' });
     }
 
-    const user = await User.findById(req.userId);
+    const user = await User.findUnique({ where: { id: req.userId } });
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -106,74 +113,107 @@ router.post('/', verifyToken, async (req, res) => {
     const jobCompany = company && String(company).trim() ? String(company).trim() : user.fullName;
 
     const job = await Job.create({
-      user: req.userId,
-      title: String(title).trim(),
-      company: jobCompany,
-      budget: String(budget).trim(),
-      location: String(location).trim(),
-      type: String(type).trim(),
-      description: String(description).trim(),
-      applicants: [],
+      data: {
+        userId: req.userId,
+        title: String(title).trim(),
+        company: jobCompany,
+        budget: String(budget).trim(),
+        location: String(location).trim(),
+        type: String(type).trim(),
+        description: String(description).trim(),
+      },
     });
-
-    const populated = await job.populate('user', 'fullName avatar email username');
 
     return res.status(201).json({
       message: 'Job posted successfully.',
-      job: mapJobResponse(populated, req.userId),
+      job: mapJobResponse(job, req.userId, [], user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to post job.' });
   }
 });
 
-// Apply for a job and automatically start a chat conversation
 router.post('/:jobId/apply', verifyToken, async (req, res) => {
   try {
-    const job = await Job.findById(req.params.jobId);
+    const job = await Job.findUnique({
+      where: { id: parseInt(req.params.jobId) },
+    });
     if (!job) {
       return res.status(404).json({ error: 'Job not found.' });
     }
 
-    if (String(job.user) === String(req.userId)) {
+    if (job.userId === req.userId) {
       return res.status(400).json({ error: 'You cannot apply for your own job.' });
     }
 
-    // Check if already applied
-    if (job.applicants.map(String).includes(String(req.userId))) {
+    const existingApplication = await prisma.jobApplication.findUnique({
+      where: {
+        jobId_userId: {
+          jobId: job.id,
+          userId: req.userId,
+        },
+      },
+    });
+
+    if (existingApplication) {
       return res.status(400).json({ error: 'You have already applied for this job.' });
     }
 
-    // Add to applicants
-    job.applicants.push(req.userId);
-    await job.save();
-
-    // Create or find conversation between applicant and job poster
-    const participantIds = [String(req.userId), String(job.user)];
-    let convo = await Conversation.findOne({
-      participants: { $all: participantIds, $size: 2 },
+    await prisma.jobApplication.create({
+      data: {
+        jobId: job.id,
+        userId: req.userId,
+      },
     });
 
-    if (!convo) {
-      convo = await Conversation.create({ participants: participantIds });
+    const participantIds = [req.userId, job.userId];
+    let convo = await prisma.conversation.findFirst({
+      where: {
+        participants: {
+          every: {
+            userId: { in: participantIds },
+          },
+        },
+      },
+      include: {
+        participants: true,
+      },
+    });
+
+    if (!convo || convo.participants.length !== 2) {
+      convo = await prisma.conversation.create({
+        data: {
+          participants: {
+            create: participantIds.map((userId) => ({ userId })),
+          },
+        },
+        include: {
+          participants: true,
+        },
+      });
     }
 
-    // Send automatic application message in chat
     const applicationMessage = `Hi! I have just applied for your job posting: "${job.title}". Let's discuss details!`;
     const message = await Message.create({
-      conversation: convo._id,
-      sender: req.userId,
-      text: applicationMessage,
+      data: {
+        conversationId: convo.id,
+        senderId: req.userId,
+        text: applicationMessage,
+      },
     });
 
-    convo.lastMessage = message.text;
-    convo.lastMessageAt = new Date();
-    await convo.save();
+    await Conversation.update({
+      where: { id: convo.id },
+      data: {
+        lastMessage: message.text,
+        lastMessageAt: new Date(),
+      },
+    });
 
     return res.json({
       message: 'Application submitted successfully! A chat conversation has been started with the poster.',
-      jobId: job._id.toString(),
-      conversationId: convo._id.toString(),
+      jobId: String(job.id),
+      conversationId: String(convo.id),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to apply for job.' });

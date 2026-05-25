@@ -7,6 +7,7 @@ interface AuthUser {
   email: string;
   username?: string;
   userCode?: string;
+  fullName?: string;
   user_metadata?: {
     full_name?: string;
   };
@@ -28,6 +29,8 @@ interface AuthState {
   signUp: (email: string, username: string, password: string, retypePassword: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  // Dev helper: create a mock session for local development
+  signInDev?: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -106,6 +109,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await persistSession(nextSession);
   };
 
+  const signInDev = async () => {
+    // Try to sign in to the backend with a known dev account first.
+    // If backend login fails, fall back to a local mock session so UI still works.
+    try {
+      const res = await loginUser('dev@krovaa.local', 'password123');
+      if (!res.error && res.data) {
+        const { token, user: u } = res.data as any;
+        const authUser: AuthUser = {
+          id: u.id,
+          email: u.email,
+          username: u.username,
+          userCode: u.userCode,
+          fullName: (u as any).fullName || u.username,
+        };
+        await setAuthState(token, authUser);
+        return;
+      }
+    } catch {
+      // ignore and fall back
+    }
+
+    const devUser: AuthUser = {
+      id: 'dev-1',
+      email: 'dev@krovaa.local',
+      username: 'dev',
+      userCode: 'DEV001',
+      fullName: 'Dev User',
+    };
+    await setAuthState('dev-token', devUser);
+  };
+
   const signUp = async (email: string, username: string, password: string, retypePassword: string) => {
     try {
       const { data, error } = await registerUser(email, username, password, retypePassword);
@@ -141,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, user, loading, signUp, signIn, signOut, signInDev }}>
       {children}
     </AuthContext.Provider>
   );

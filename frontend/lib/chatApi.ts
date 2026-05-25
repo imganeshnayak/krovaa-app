@@ -22,6 +22,13 @@ type RawConversation = {
 
 type RawSender = RawParticipant | string;
 
+type RawReplyTo = {
+  id?: string;
+  text?: string;
+  sender?: { id?: string; fullName?: string } | null;
+  attachments?: Array<{ url: string; type: 'image' | 'video' | 'file' }>;
+};
+
 type RawMessage = {
   id?: string;
   _id?: string;
@@ -32,6 +39,9 @@ type RawMessage = {
   createdAt?: string;
   updatedAt?: string;
   clientMessageId?: string;
+  replyTo?: RawReplyTo | null;
+  isForwarded?: boolean;
+  forwardedFrom?: string | null;
 };
 
 export type ChatParticipant = {
@@ -62,6 +72,14 @@ export type ChatMessage = {
   createdAt: string;
   updatedAt?: string;
   clientMessageId?: string;
+  replyTo?: {
+    id: string;
+    text: string;
+    sender: { id: string; fullName: string } | null;
+    attachments: Array<{ url: string; type: 'image' | 'video' | 'file' }>;
+  } | null;
+  isForwarded?: boolean;
+  forwardedFrom?: string | null;
 };
 
 function normalizeParticipant(participant: RawParticipant | undefined): ChatParticipant {
@@ -99,6 +117,18 @@ function normalizeMessage(message: RawMessage): ChatMessage {
     createdAt: message.createdAt ?? '',
     updatedAt: message.updatedAt,
     clientMessageId: message.clientMessageId,
+    replyTo: message.replyTo
+      ? {
+          id: message.replyTo.id ?? '',
+          text: message.replyTo.text ?? '',
+          sender: message.replyTo.sender
+            ? { id: message.replyTo.sender.id ?? '', fullName: message.replyTo.sender.fullName ?? '' }
+            : null,
+          attachments: message.replyTo.attachments ?? [],
+        }
+      : null,
+    isForwarded: message.isForwarded || false,
+    forwardedFrom: message.forwardedFrom || null,
   };
 }
 

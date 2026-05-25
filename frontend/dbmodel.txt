@@ -1,0 +1,740 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   Int                   @id @default(autoincrement())
+  username             String                @unique
+  email                String                @unique
+  password             String
+  displayName          String?               @map("display_name")
+  shareId              String?               @unique @map("share_id")
+  bio                  String?
+  avatarUrl            String?               @map("avatar_url")
+  coverPhotoUrl        String?               @map("cover_photo_url")
+  role                 String                @default("client")
+  status               String                @default("active")
+  telegramId           String?               @map("telegram_id")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  socialLinks          Json?                 @default("[]") @map("social_links")
+  permissions          Json?                 @default("[]")
+  profession           String?
+  verified             Boolean               @default(false)
+  walletBalance        Float                 @default(0) @map("wallet_balance")
+  razorpayContactId    String?               @map("razorpay_contact_id")
+  phoneNumber          String?               @map("phone_number")
+  city                 String?
+  pincode              String?
+  gender               String?
+  age                  Int?
+  userGoal             String?               @map("user_goal")
+  skills               Json?                 @default("[]")
+  // RBI Compliance Fields
+  kycStatus            String                @default("not_submitted") @map("kyc_status") // not_submitted, pending, approved, rejected
+  kycVerifiedAt        DateTime?             @map("kyc_verified_at")
+  kycRejectionReason   String?               @map("kyc_rejection_reason")
+  kycData              Json?                 @map("kyc_data") // {name, aadhar, pan, address, dob}
+  twoFactorEnabled     Boolean               @default(false) @map("two_factor_enabled")
+  twoFactorMethod      String?               @map("two_factor_method") // sms, email, authenticator
+  twoFactorSecret      String?               @map("two_factor_secret")
+  dataConsentGiven     Boolean               @default(false) @map("data_consent_given")
+  consentGivenAt       DateTime?             @map("consent_given_at")
+  dataRetentionUntil   DateTime?             @map("data_retention_until")
+  erasureRequested     Boolean               @default(false) @map("erasure_requested")
+  erasureRequestedAt   DateTime?             @map("erasure_requested_at")
+  // Transaction Limits (RBI Guidelines)
+  dailyTransferLimit   Float                 @default(50000) @map("daily_transfer_limit") // Default 50K per day
+  monthlyTransferLimit Float                 @default(500000) @map("monthly_transfer_limit") // Default 500K per month
+  dailyTransferUsed    Float                 @default(0) @map("daily_transfer_used")
+  monthlyTransferUsed  Float                 @default(0) @map("monthly_transfer_used")
+  lastTransferResetDay DateTime?             @map("last_transfer_reset_day")
+  // Compliance Relations
+  kycSubmissions       KYCSubmission[]
+  twoFactorOtps        TwoFactorOTP[]
+  dataConsents         DataConsent[]
+  paymentRefunds       PaymentRefund[]
+  transactionLimits    TransactionLimit[]
+  imageGenerations     ImageGeneration[]
+  subscription         Subscription?
+  posts                Post[]                @relation("UserPosts")
+  postLikes            Post_Like[]           @relation("UserPostLikes")
+  postComments         Post_Comment[]        @relation("UserPostComments")
+  sentMessages         Message[]             @relation("UserSentMessages")
+  receivedMessages     Message[]             @relation("UserReceivedMessages")
+  clientDeals          EscrowDeal[]          @relation("UserClientDeals")
+  vendorDeals          EscrowDeal[]          @relation("UserVendorDeals")
+  postedJobs           Job[]                 @relation("PostedJobs")
+  jobApplications      Application[]         @relation("UserApplications")
+  verificationRequests VerificationRequest[]
+  payoutRequests       PayoutRequest[]
+  walletTransactions   WalletTransaction[]
+  ratingReviews        Rating[]              @relation("Reviewer")
+  ratingReceived       Rating[]              @relation("Reviewed")
+  reportSent           Report[]              @relation("Reporter")
+  reportReceived       Report[]              @relation("Reported")
+  blockedUsers         BlockedUser[]         @relation("Blocker")
+  blockedBy            BlockedUser[]         @relation("Blocked")
+  createdTeams         Team[]                @relation("TeamCreator")
+  teamMemberships      TeamMember[]          @relation("TeamMemberships")
+  groupMemberships     GroupMember[]         @relation("GroupMemberships")
+  groupMessages        GroupMessage[]        @relation("UserGroupMessages")
+  communityMessages    CommunityMessage[]
+
+  // Community & Project relations
+  createdCommunities   Community[]
+  communityMemberships CommunityMember[]
+  createdProjects      Project[]
+  projectMessages      ProjectMessage[]
+  uploadedProjectFiles ProjectFile[]
+
+  @@map("users")
+}
+
+model Message {
+  id                Int      @id @default(autoincrement())
+  senderId          Int      @map("sender_id")
+  receiverId        Int      @map("receiver_id")
+  sender            User     @relation("UserSentMessages", fields: [senderId], references: [id])
+  receiver          User     @relation("UserReceivedMessages", fields: [receiverId], references: [id])
+  chatId            String   @map("chat_id")
+  content           String
+  messageType       String   @default("text") @map("message_type")
+  attachmentUrl     String?  @map("attachment_url")
+  attachmentName    String?  @map("attachment_name")
+  read              Boolean  @default(false)
+  createdAt         DateTime @default(now()) @map("created_at")
+  isDeleted         Boolean  @default(false) @map("is_deleted")
+  isOpened          Boolean  @default(false) @map("is_opened")
+  isViewOnce        Boolean  @default(false) @map("is_view_once")
+  color             String?
+  deletedBySender   Boolean  @default(false) @map("deleted_by_sender")
+  deletedByReceiver Boolean  @default(false) @map("deleted_by_receiver")
+
+  @@map("messages")
+}
+
+model Rating {
+  id         Int      @id @default(autoincrement())
+  reviewerId Int      @map("reviewer_id")
+  reviewedId Int      @map("reviewed_id")
+  reviewer   User     @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewed   User     @relation("Reviewed", fields: [reviewedId], references: [id])
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([reviewerId, reviewedId])
+  @@map("ratings")
+}
+
+model Report {
+  id         Int      @id @default(autoincrement())
+  reporterId Int      @map("reporter_id")
+  reportedId Int      @map("reported_id")
+  reporter   User     @relation("Reporter", fields: [reporterId], references: [id])
+  reported   User     @relation("Reported", fields: [reportedId], references: [id])
+  reason     String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("reports")
+}
+
+model BlockedUser {
+  id        Int      @id @default(autoincrement())
+  blockerId Int      @map("blocker_id")
+  blockedId Int      @map("blocked_id")
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id])
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([blockerId, blockedId])
+  @@map("blocked_users")
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  action    String
+  details   String?
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("activity_log")
+}
+
+model EscrowDeal {
+  id                Int                 @id @default(autoincrement())
+  chatId            String              @map("chat_id")
+  clientId          Int                 @map("client_id")
+  vendorId          Int                 @map("vendor_id")
+  client            User                @relation("UserClientDeals", fields: [clientId], references: [id])
+  vendor            User                @relation("UserVendorDeals", fields: [vendorId], references: [id])
+  title             String
+  description       String?
+  totalAmount       Float               @map("total_amount")
+  releasedPercent   Float               @default(0) @map("released_percent")
+  status            String              @default("pending_payment")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  paidAmount        Float               @default(0) @map("paid_amount")
+  paymentStatus     String              @default("pending") @map("payment_status")
+  razorpayOrderId   String?             @map("razorpay_order_id")
+  razorpayPaymentId String?             @map("razorpay_payment_id")
+  terms             String?
+  isSplitDeal       Boolean             @default(false) @map("is_split_deal")
+  teamId            Int?                @map("team_id")
+  splitConfig       Json?               @map("split_config")
+  transactions      EscrowTransaction[]
+
+  @@map("escrow_deals")
+}
+
+model EscrowTransaction {
+  id        Int        @id @default(autoincrement())
+  dealId    Int        @map("deal_id")
+  percent   Float
+  amount    Float
+  note      String?
+  createdAt DateTime   @default(now()) @map("created_at")
+  deal      EscrowDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@map("escrow_transactions")
+}
+
+model VerificationRequest {
+  id                Int       @id @default(autoincrement())
+  userId            Int       @map("user_id")
+  user              User      @relation(fields: [userId], references: [id])
+  status            String    @default("pending_payment")
+  paymentAmount     Float     @map("payment_amount")
+  paymentProof      String?   @map("payment_proof")
+  adminNote         String?   @map("admin_note")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  reviewedAt        DateTime? @map("reviewed_at")
+  paymentStatus     String    @default("pending") @map("payment_status")
+  razorpayOrderId   String?   @map("razorpay_order_id")
+  razorpayPaymentId String?   @map("razorpay_payment_id")
+
+  @@map("verification_requests")
+}
+
+model PaymentLog {
+  id                Int      @id @default(autoincrement())
+  type              String
+  entityId          Int      @map("entity_id")
+  razorpayOrderId   String?  @map("razorpay_order_id")
+  razorpayPaymentId String?  @unique @map("razorpay_payment_id")
+  amount            Float
+  currency          String   @default("INR")
+  status            String
+  eventType         String?  @map("event_type")
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("payment_logs")
+}
+
+model WalletTransaction {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  type        String
+  amount      Float
+  balance     Float
+  reference   String?
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  metadata    Json?
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("wallet_transactions")
+}
+
+model PayoutRequest {
+  id                    Int       @id @default(autoincrement())
+  userId                Int       @map("user_id")
+  user                  User      @relation(fields: [userId], references: [id])
+  amount                Float
+  status                String    @default("pending")
+  bankAccount           String?   @map("bank_account")
+  ifscCode              String?   @map("ifsc_code")
+  accountName           String    @map("account_name")
+  razorpayPayoutId      String?   @map("razorpay_payout_id")
+  adminNote             String?   @map("admin_note")
+  requestedAt           DateTime  @default(now()) @map("requested_at")
+  processedAt           DateTime? @map("processed_at")
+  paymentMethod         String    @default("bank") @map("payment_method")
+  razorpayContactId     String?   @map("razorpay_contact_id")
+  razorpayFundAccountId String?   @map("razorpay_fund_account_id")
+  upiVpa                String?   @map("upi_vpa")
+  phoneNumber           String?   @map("phone_number")
+  email                 String?
+
+  @@map("payout_requests")
+}
+
+model KYCSubmission {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName        String    @map("full_name")
+  aadharNumber    String?   @map("aadhar_number")
+  panNumber       String?   @map("pan_number")
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  dob             DateTime? @map("date_of_birth")
+  documentType    String    @map("document_type") // aadhar, pan, passport, dl
+  documentUrl     String?   @map("document_url")
+  selfieUrl       String?   @map("selfie_url")
+  status          String    @default("pending") @map("status") // pending, approved, rejected
+  rejectionReason String?   @map("rejection_reason")
+  submittedAt     DateTime  @default(now()) @map("submitted_at")
+  verifiedAt      DateTime? @map("verified_at")
+  verifiedBy      Int?      @map("verified_by") // Admin ID
+
+  @@map("kyc_submissions")
+}
+
+model TwoFactorOTP {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  otp       String
+  method    String    // sms, email
+  destination String  // phone or email
+  attempts  Int       @default(0)
+  verified  Boolean   @default(false)
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("two_factor_otps")
+}
+
+model DataConsent {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentType String    @map("consent_type") // pii_storage, marketing, analytics
+  consentText String    @map("consent_text")
+  given       Boolean   @default(false)
+  givenAt     DateTime? @map("given_at")
+  version     String    @default("1.0") // For tracking consent version
+  ipAddress   String?   @map("ip_address")
+  userAgent   String?   @map("user_agent")
+
+  @@map("data_consents")
+}
+
+model PaymentRefund {
+  id               Int       @id @default(autoincrement())
+  userId           Int       @map("user_id")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactionId    Int?      @map("transaction_id")
+  amount           Float
+  reason           String
+  status           String    @default("pending") // pending, approved, rejected, completed
+  requestedAt      DateTime  @default(now()) @map("requested_at")
+  processedAt      DateTime? @map("processed_at")
+  policy           String    @default("standard") // For refund policy version
+  notes            String?
+
+  @@map("payment_refunds")
+}
+
+model TransactionLimit {
+  id               Int       @id @default(autoincrement())
+  userId           Int       @map("user_id")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyLimit       Float     @default(50000) @map("daily_limit")
+  monthlyLimit     Float     @default(500000) @map("monthly_limit")
+  dailyUsed        Float     @default(0) @map("daily_used")
+  monthlyUsed      Float     @default(0) @map("monthly_used")
+  resetTime        DateTime  @map("reset_time")
+  reason           String?   // kycPending, riskFlag, custom
+  customReason     String?   @map("custom_reason")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("transaction_limits")
+}
+
+model Notification {
+  id           Int                @id @default(autoincrement())
+  title        String
+  message      String
+  type         String             @default("info")
+  sentBy       Int?               @map("sent_by")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  targetUserId Int?               @map("target_user_id")
+  color        String?
+  metadata     Json?
+  reads        NotificationRead[]
+
+  @@map("notifications")
+}
+
+model NotificationRead {
+  id             Int          @id @default(autoincrement())
+  notificationId Int          @map("notification_id")
+  userId         Int          @map("user_id")
+  readAt         DateTime     @default(now()) @map("read_at")
+  isDeleted      Boolean      @default(false) @map("is_deleted")
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@map("notification_reads")
+}
+
+model OtpCode {
+  id        Int      @id @default(autoincrement())
+  email     String
+  code      String
+  type      String
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("otp_codes")
+}
+
+model SystemSetting {
+  key   String @id
+  value String
+
+  @@map("system_settings")
+}
+
+model Ad {
+  id                Int       @id @default(autoincrement())
+  title             String
+  description       String?
+  imageUrl          String?   @map("image_url")
+  videoUrl          String?   @map("video_url")
+  externalUrl       String?   @map("external_url")
+  ctaText           String?   @map("cta_text")
+  type              String    @default("text")
+  targetProfessions Json?     @default("[]") @map("target_professions")
+  status            String    @default("active")
+  impressions       Int       @default(0)
+  sentBy            Int?      @map("sent_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  clicks            AdClick[]
+
+  @@map("ads")
+}
+
+model AdClick {
+  id        Int      @id @default(autoincrement())
+  adId      Int      @map("ad_id")
+  userId    Int?     @map("user_id")
+  clickedAt DateTime @default(now()) @map("clicked_at")
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@map("ad_clicks")
+}
+
+model Job {
+  id          Int           @id @default(autoincrement())
+  title       String
+  company     String
+  location    String
+  budget      String
+  mode        String        @default("Remote")
+  description String
+  terms       Json?         @default("[]")
+  postedById  Int           @map("posted_by_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  postedBy    User          @relation("PostedJobs", fields: [postedById], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@map("jobs")
+}
+
+model Application {
+  id           Int      @id @default(autoincrement())
+  jobId        Int      @map("job_id")
+  userId       Int?     @map("user_id")
+  teamId       Int?     @map("team_id")
+  bidAmount    Float?   @map("bid_amount")
+  deliveryTime String?  @map("delivery_time")
+  coverLetter  String?  @map("cover_letter")
+  status       String   @default("pending")
+  createdAt    DateTime @default(now()) @map("created_at")
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user         User?    @relation("UserApplications", fields: [userId], references: [id], onDelete: Cascade)
+  team         Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, userId])
+  @@map("applications")
+}
+
+model Post {
+  id        Int            @id @default(autoincrement())
+  userId    Int            @map("user_id")
+  text      String?
+  media     Json?          @default("[]")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  user      User           @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
+  likes     Post_Like[]
+  comments  Post_Comment[]
+
+  @@map("posts")
+}
+
+model Post_Like {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserPostLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("post_likes")
+}
+
+model Post_Comment {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int      @map("user_id")
+  text      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserPostComments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("post_comments")
+}
+
+model ImageGeneration {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prompt    String
+  style     String   @default("natural")
+  imageUrl  String   @map("image_url")
+  size      String   @default("1024x1024")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("image_generations")
+}
+
+model ImageGenerationDaily {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  count     Int      @default(1)
+  date      DateTime @map("date")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, date])
+  @@map("image_generation_daily")
+}
+
+model Subscription {
+  id                Int       @id @default(autoincrement())
+  userId            Int       @map("user_id")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId            String    @map("plan_id")
+  planName          String    @map("plan_name")
+  billingCycle      String    @default("monthly") @map("billing_cycle")
+  monthlyLimit      Int       @default(5) @map("monthly_limit")
+  imagesUsed        Int       @default(0) @map("images_used")
+  imagesThisMonth   Int       @default(0) @map("images_this_month")
+  resetDate         DateTime  @map("reset_date")
+  razorpayOrderId   String?   @map("razorpay_order_id")
+  razorpayPaymentId String?   @map("razorpay_payment_id")
+  status            String    @default("active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  expiresAt         DateTime? @map("expires_at")
+
+  @@unique([userId])
+  @@map("subscriptions")
+}
+
+model Team {
+  id           Int           @id @default(autoincrement())
+  name         String
+  description  String?
+  creatorId    Int           @map("creator_id")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  creator      User          @relation("TeamCreator", fields: [creatorId], references: [id])
+  members      TeamMember[]
+  applications Application[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id       Int      @id @default(autoincrement())
+  teamId   Int      @map("team_id")
+  userId   Int      @map("user_id")
+  role     String   @default("member")
+  joinedAt DateTime @default(now()) @map("joined_at")
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user     User     @relation("TeamMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+model GroupChat {
+  id          Int            @id @default(autoincrement())
+  name        String?
+  description String?
+  isTeamChat  Boolean        @default(false) @map("is_team_chat")
+  communityId Int?           @unique @map("community_id")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  members     GroupMember[]
+  messages    GroupMessage[]
+  community   Community?     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@map("group_chats")
+}
+
+model GroupMember {
+  id       Int       @id @default(autoincrement())
+  groupId  Int       @map("group_id")
+  userId   Int       @map("user_id")
+  role     String    @default("member")
+  joinedAt DateTime  @default(now()) @map("joined_at")
+  group    GroupChat @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user     User      @relation("GroupMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+model GroupMessage {
+  id            Int       @id @default(autoincrement())
+  groupId       Int       @map("group_id")
+  senderId      Int       @map("sender_id")
+  content       String
+  messageType   String    @default("text") @map("message_type")
+  attachmentUrl String?   @map("attachment_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  group         GroupChat @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender        User      @relation("UserGroupMessages", fields: [senderId], references: [id])
+
+  @@map("group_messages")
+}
+
+// Community and project workspace models
+model Community {
+  id          Int               @id @default(autoincrement())
+  name        String
+  slug        String            @unique
+  description String?
+  isPrivate   Boolean           @default(false)
+  creatorId   Int               @map("creator_id")
+  creator     User              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  members     CommunityMember[]
+  messages    CommunityMessage[]
+  projects    Project[]
+  groupChat   GroupChat?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  @@map("communities")
+}
+
+model CommunityMember {
+  id          Int       @id @default(autoincrement())
+  communityId Int       @map("community_id")
+  userId      Int       @map("user_id")
+  role        String    @default("member")
+  joinedAt    DateTime  @default(now()) @map("joined_at")
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, userId])
+  @@map("community_members")
+}
+
+model CommunityMessage {
+  id            Int       @id @default(autoincrement())
+  communityId   Int       @map("community_id")
+  senderId      Int       @map("sender_id")
+  content       String
+  messageType   String    @default("text") @map("message_type")
+  attachmentUrl String?   @map("attachment_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  community     Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  sender        User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("community_messages")
+}
+
+model Project {
+  id          Int              @id @default(autoincrement())
+  communityId Int              @map("community_id")
+  name        String
+  description String?
+  createdBy   Int              @map("created_by")
+  creator     User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  community   Community        @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  messages    ProjectMessage[]
+  files       ProjectFile[]
+  isArchived  Boolean          @default(false)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@map("projects")
+}
+
+model ProjectMessage {
+  id            Int      @id @default(autoincrement())
+  projectId     Int      @map("project_id")
+  senderId      Int      @map("sender_id")
+  content       String
+  messageType   String   @default("text") @map("message_type")
+  attachmentUrl String?  @map("attachment_url")
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sender        User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("project_messages")
+}
+
+model ProjectFile {
+  id         Int      @id @default(autoincrement())
+  projectId  Int      @map("project_id")
+  uploadedBy Int      @map("uploaded_by")
+  fileName   String   @map("file_name")
+  fileUrl    String   @map("file_url")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader   User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@map("project_files")
+}
+
+model JobAnalytics {
+  id         Int      @id @default(autoincrement())
+  jobId      Int      @map("job_id")
+  views      Int      @default(0)
+  applicants Int      @default(0)
+  hires      Int      @default(0)
+  revenue    Float    @default(0)
+  month      Int
+  year       Int
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([jobId, month, year])
+  @@map("job_analytics")
+}
+

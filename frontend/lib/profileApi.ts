@@ -2,10 +2,10 @@ import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 
 const DEFAULT_API_BASE_URL = Platform.select({
-  android: 'http://10.0.2.2:4000',
-  ios: 'http://localhost:4000',
-  web: 'http://localhost:4000',
-  default: 'http://localhost:4000',
+  android: 'http://10.0.2.2:5000',
+  ios: 'http://localhost:5000',
+  web: 'http://localhost:5000',
+  default: 'http://localhost:5000',
 });
 
 const EXPO_TUNNEL_HOST_SUFFIXES = ['.exp.direct', '.expo.dev'];
@@ -53,7 +53,7 @@ function getApiBaseUrl() {
     expoHostIp !== '127.0.0.1' &&
     !isExpoTunnelHost(expoHostIp)
   ) {
-    return `http://${expoHostIp}:4000`;
+    return `http://${expoHostIp}:5000`;
   }
 
   return DEFAULT_API_BASE_URL;
@@ -76,7 +76,17 @@ export interface UserProfile {
   profession: 'tech' | 'creative' | 'engineering' | 'professional' | 'freelancer' | 'student' | 'none' | 'other';
   bio: string;
   avatar: string;
+  coverPhotoUrl?: string;
+  userGoal?: 'OFFER_SERVICE' | 'HIRE_PROFESSIONALS' | '';
   skills: string[];
+  socialLinks?: Array<{ platform: string; url: string }>;
+  verificationStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+  verificationRequestedAt?: string | null;
+  verificationFee?: number;
+  ratingsSummary?: {
+    averageRating: number;
+    totalRatings: number;
+  };
   stats: {
     jobsDone: number;
     reviews: number;
@@ -99,9 +109,38 @@ type StatsResponse = {
   };
 };
 
+type VerificationStatusResponse = {
+  verificationStatus: 'none' | 'pending' | 'verified' | 'rejected';
+  verificationFee: number;
+  verificationRequestedAt: string | null;
+};
+
+type VerificationFeeResponse = {
+  fee: number;
+};
+
+type RatingsResponse = {
+  ratings: Array<{
+    id: string;
+    rating: number;
+    comment: string;
+    createdAt: string;
+    reviewer: {
+      id: string;
+      fullName: string;
+      avatar: string;
+      username: string;
+    };
+  }>;
+  summary: {
+    averageRating: number;
+    totalRatings: number;
+  };
+};
+
 async function authRequest<TResponse>(
   path: string,
-  method: 'GET' | 'PUT' = 'GET',
+  method: 'GET' | 'PUT' | 'POST' | 'DELETE' = 'GET',
   token: string,
   body?: Record<string, unknown>
 ) {
@@ -181,7 +220,10 @@ export async function updateUserProfile(
     profession?: 'tech' | 'creative' | 'engineering' | 'professional' | 'freelancer' | 'student' | 'none' | 'other';
     bio?: string;
     avatar?: string;
+    coverPhotoUrl?: string;
+    userGoal?: 'OFFER_SERVICE' | 'HIRE_PROFESSIONALS' | '';
     skills?: string[];
+    socialLinks?: Array<{ platform: string; url: string }>;
   }
 ) {
   return authRequest<ProfileResponse>('/api/profile', 'PUT', token, updates);
@@ -227,4 +269,90 @@ export async function uploadProfilePhoto(token: string, photoUri: string) {
   } catch {
     return { error: `Unable to reach the profile server at ${url}.`, data: null };
   }
+}
+
+export async function uploadCoverPhoto(token: string, photoUri: string) {
+  const url = `${API_BASE_URL}/api/profile/cover-photo`;
+  const formData = new FormData();
+
+  formData.append('photo', {
+    uri: photoUri,
+    name: `cover-${Date.now()}.jpg`,
+    type: 'image/jpeg',
+  } as any);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = (await response.json()) as { error?: string } & ProfileResponse;
+
+    if (!response.ok) {
+      return { error: data.error || 'Unable to upload cover photo.', data: null };
+    }
+
+    return { data: data as ProfileResponse, error: null };
+  } catch {
+    return { error: `Unable to reach the profile server at ${url}.`, data: null };
+  }
+}
+
+export async function deleteProfilePhoto(token: string) {
+  return authRequest<ProfileResponse>('/api/profile/photo', 'DELETE', token);
+}
+
+export async function deleteCoverPhoto(token: string) {
+  return authRequest<ProfileResponse>('/api/profile/cover-photo', 'DELETE', token);
+}
+
+export async function getVerificationStatus(token: string) {
+  return authRequest<VerificationStatusResponse>('/api/profile/verification/status', 'GET', token);
+}
+
+export async function getVerificationFee() {
+  const url = `${API_BASE_URL}/api/profile/verification/fee`;
+
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    const data = (await response.json()) as { error?: string } & VerificationFeeResponse;
+
+    if (!response.ok) {
+      return { error: data.error || 'Unable to fetch verification fee.', data: null };
+    }
+
+    return { data: data as VerificationFeeResponse, error: null };
+  } catch {
+    return { error: `Unable to reach the profile server at ${url}.`, data: null };
+  }
+}
+
+export async function applyForVerification(token: string) {
+  return authRequest<{ message: string; status: string; fee: number }>('/api/profile/verification/request', 'POST', token, {});
+}
+
+export async function getRatingEligibility(token: string, userId: string) {
+  return authRequest<{ canRate: boolean; reason: string }>(`/api/profile/rating-eligibility/${encodeURIComponent(userId)}`, 'GET', token);
+}
+
+export async function rateUser(
+  token: string,
+  reviewedId: string,
+  rating: number,
+  comment: string
+) {
+  return authRequest<{ message: string; rating: { reviewedId: number; rating: number; comment: string }; summary: { averageRating: number; totalRatings: number } }>(
+    '/api/profile/ratings',
+    'POST',
+    token,
+    { reviewedId, rating, comment }
+  );
+}
+
+export async function getUserRatings(userId: string) {
+  return publicRequest<RatingsResponse>(`/api/profile/ratings/${encodeURIComponent(userId)}`);
 }

@@ -9,8 +9,8 @@ const router = express.Router();
 
 function mapPostResponse(post) {
   return {
-    id: post._id.toString(),
-    userId: post.user.toString(),
+    id: String(post.id),
+    userId: String(post.userId),
     mediaUrl: post.mediaUrl,
     mediaType: post.mediaType,
     caption: post.caption,
@@ -54,7 +54,10 @@ const upload = multer({
 
 router.get('/me', verifyToken, async (req, res) => {
   try {
-    const posts = await MyPost.find({ user: req.userId }).sort({ createdAt: -1 });
+    const posts = await MyPost.findMany({
+      where: { userId: req.userId },
+      orderBy: { createdAt: 'desc' },
+    });
 
     return res.json({
       posts: posts.map(mapPostResponse),
@@ -66,7 +69,10 @@ router.get('/me', verifyToken, async (req, res) => {
 
 router.get('/user/:userId', async (req, res) => {
   try {
-    const posts = await MyPost.find({ user: req.params.userId }).sort({ createdAt: -1 });
+    const posts = await MyPost.findMany({
+      where: { userId: parseInt(req.params.userId) },
+      orderBy: { createdAt: 'desc' },
+    });
 
     return res.json({
       posts: posts.map(mapPostResponse),
@@ -87,10 +93,12 @@ router.post('/', verifyToken, upload.single('media'), async (req, res) => {
     const caption = req.body.caption ? String(req.body.caption).trim() : '';
 
     const post = await MyPost.create({
-      user: req.userId,
-      mediaUrl,
-      mediaType,
-      caption,
+      data: {
+        userId: req.userId,
+        mediaUrl,
+        mediaType,
+        caption,
+      },
     });
 
     return res.status(201).json({
@@ -110,22 +118,23 @@ router.put('/:postId', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Caption is required.' });
     }
 
-    const post = await MyPost.findOneAndUpdate(
-      {
-        _id: req.params.postId,
-        user: req.userId,
+    const post = await MyPost.updateMany({
+      where: {
+        id: parseInt(req.params.postId),
+        userId: req.userId,
       },
-      { caption },
-      { new: true }
-    );
+      data: { caption },
+    });
 
-    if (!post) {
+    if (post.count === 0) {
       return res.status(404).json({ error: 'Post not found.' });
     }
 
+    const updatedPost = await MyPost.findUnique({ where: { id: parseInt(req.params.postId) } });
+
     return res.json({
       message: 'Post updated successfully.',
-      post: mapPostResponse(post),
+      post: mapPostResponse(updatedPost),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to update post.' });
@@ -134,14 +143,20 @@ router.put('/:postId', verifyToken, async (req, res) => {
 
 router.delete('/:postId', verifyToken, async (req, res) => {
   try {
-    const post = await MyPost.findOneAndDelete({
-      _id: req.params.postId,
-      user: req.userId,
+    const post = await MyPost.findFirst({
+      where: {
+        id: parseInt(req.params.postId),
+        userId: req.userId,
+      },
     });
 
     if (!post) {
       return res.status(404).json({ error: 'Post not found.' });
     }
+
+    await MyPost.delete({
+      where: { id: post.id },
+    });
 
     return res.json({ message: 'Post deleted successfully.' });
   } catch (error) {

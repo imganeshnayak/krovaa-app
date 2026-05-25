@@ -1,13 +1,16 @@
-import mongoose from 'mongoose';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 async function connectDB() {
-  const mongoUri = process.env.MONGO_URI;
-
-  if (!mongoUri) {
-    throw new Error('MONGO_URI is not defined');
+  try {
+    await prisma.$connect();
+    console.log('PostgreSQL connected via Prisma');
+  } catch (error) {
+    console.error('PostgreSQL connection error:', error);
+    throw error;
   }
-
-  await mongoose.connect(mongoUri);
 }
 
+export { prisma };
 export default connectDB;

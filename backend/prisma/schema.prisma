@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int       @id @default(autoincrement())
+  email          String    @unique
+  username       String    @unique
+  userCode       String?   @unique
+  password       String
+  fullName       String    @default("User")
+  location       String    @default("")
+  city           String    @default("")
+  pincode        String    @default("")
+  phoneNumber    String    @default("")
+  age            Int?
+  gender         String    @default("")
+  profession     String    @default("none")
+  bio            String    @default("")
+  avatar         String    @default("https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200")
+  coverPhotoUrl  String    @default("")
+  userGoal       String    @default("")
+  socialLinks    String    @default("[]")
+  skills         String    @default("[]")
+  jobsDone       Int       @default(0)
+  reviews        Int       @default(0)
+  earned         Float     @default(0)
+  walletBalance  Float     @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  sentMessages         Message[]             @relation("UserSentMessages")
+  posts                MyPost[]
+  jobs                 Job[]                 @relation("PostedJobs")
+  jobApplications      JobApplication[]      @relation("UserApplications")
+  transactions         Transaction[]
+  blockedUsers         BlockedUser[]         @relation("Blocker")
+  blockedBy            BlockedUser[]         @relation("Blocked")
+  conversations        ConversationUser[]
+  verificationRequest  VerificationRequest?
+  ratingsGiven         UserRating[]          @relation("ReviewerUserRatings")
+  ratingsReceived      UserRating[]          @relation("ReviewedUserRatings")
+
+  @@map("users")
+}
+
+model VerificationRequest {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique @map("user_id")
+  fee          Float    @default(299)
+  status       String   @default("pending")
+  requestedAt  DateTime @default(now()) @map("requested_at")
+  reviewedAt   DateTime? @map("reviewed_at")
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("verification_requests")
+}
+
+model UserRating {
+  id           Int      @id @default(autoincrement())
+  reviewerId   Int      @map("reviewer_id")
+  reviewedId   Int      @map("reviewed_id")
+  rating       Int
+  comment      String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  reviewer     User     @relation("ReviewerUserRatings", fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewed     User     @relation("ReviewedUserRatings", fields: [reviewedId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewerId, reviewedId])
+  @@index([reviewedId])
+  @@map("user_ratings")
+}
+
+model Conversation {
+  id            Int                @id @default(autoincrement())
+  lastMessage   String             @default("")
+  lastMessageAt DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  participants  ConversationUser[]
+  messages      Message[]
+
+  @@map("conversations")
+}
+
+model ConversationUser {
+  id             Int          @id @default(autoincrement())
+  conversationId Int          @map("conversation_id")
+  userId         Int          @map("user_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@map("conversation_users")
+}
+
+model Message {
+  id              Int          @id @default(autoincrement())
+  conversationId  Int          @map("conversation_id")
+  senderId        Int          @map("sender_id")
+  text            String       @default("")
+  clientMessageId String       @default("") @map("client_message_id")
+  attachments     String       @default("[]")
+  readBy          String       @default("[]") @map("read_by")
+  replyToId       Int?         @map("reply_to_id")
+  isForwarded     Boolean      @default(false) @map("is_forwarded")
+  forwardedFrom   String?      @map("forwarded_from")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  sender          User         @relation("UserSentMessages", fields: [senderId], references: [id])
+  replyTo         Message?     @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies         Message[]    @relation("MessageReplies")
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model MyPost {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  mediaUrl  String   @map("media_url")
+  mediaType String   @map("media_type")
+  caption   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("my_posts")
+}
+
+model Job {
+  id          Int             @id @default(autoincrement())
+  userId      Int             @map("user_id")
+  title       String
+  company     String
+  budget      String
+  location    String
+  type        String
+  description String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  user        User            @relation("PostedJobs", fields: [userId], references: [id], onDelete: Cascade)
+  applications JobApplication[]
+
+  @@index([userId])
+  @@map("jobs")
+}
+
+model JobApplication {
+  id        Int      @id @default(autoincrement())
+  jobId     Int      @map("job_id")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now())
+
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserApplications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, userId])
+  @@map("job_applications")
+}
+
+model Transaction {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  type         String
+  label        String
+  amount       Float
+  description  String    @default("")
+  status       String    @default("completed")
+  relatedId    String?   @map("related_id")
+  relatedModel String?   @map("related_model")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@map("transactions")
+}
+
+model BlockedUser {
+  id        Int      @id @default(autoincrement())
+  blockerId Int      @map("blocker_id")
+  blockedId Int      @map("blocked_id")
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@map("blocked_users")
+}
