@@ -6,7 +6,8 @@ export type Job = {
   company: string;
   budget: string;
   location: string;
-  type: 'Design' | 'Development' | 'Marketing' | 'Writing' | 'Video';
+  type: string;
+  mode: string;
   description: string;
   posted: string;
   avatar: string;
@@ -16,15 +17,33 @@ export type Job = {
   applicantCount: number;
 };
 
-export async function getJobs(token?: string, category?: string, searchQuery?: string) {
+export async function getJobs(
+  token?: string,
+  filters?: {
+    category?: string;
+    q?: string;
+    location?: string;
+    mode?: string;
+  }
+) {
   try {
-    let url = `${API_BASE_URL}/api/jobs?`;
-    if (category && category !== 'All') {
-      url += `category=${encodeURIComponent(category)}&`;
+    const params = new URLSearchParams();
+    if (filters?.category && filters.category !== 'All') {
+      params.append('category', filters.category);
     }
-    if (searchQuery) {
-      url += `q=${encodeURIComponent(searchQuery)}&`;
+    if (filters?.q) {
+      params.append('q', filters.q);
     }
+    if (filters?.location) {
+      params.append('location', filters.location);
+    }
+    if (filters?.mode && filters.mode !== 'ALL_MODES') {
+      params.append('mode', filters.mode);
+    }
+
+    const queryString = params.toString();
+    let url = `${API_BASE_URL}/api/jobs`;
+    if (queryString) url += `?${queryString}`;
 
     const headers: Record<string, string> = {};
     if (token) {
@@ -44,6 +63,23 @@ export async function getJobs(token?: string, category?: string, searchQuery?: s
   }
 }
 
+export async function getMyJobs(token: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/jobs/my`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Failed to fetch your listings' };
+    }
+
+    return { data: data.jobs as Job[], error: null };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
 export async function postJob(
   token: string,
   jobData: {
@@ -51,6 +87,7 @@ export async function postJob(
     budget: string;
     location: string;
     type: string;
+    mode?: string;
     description: string;
     company?: string;
   }
@@ -77,6 +114,59 @@ export async function postJob(
   }
 }
 
+export async function updateJob(
+  token: string,
+  jobId: string,
+  jobData: {
+    title?: string;
+    budget?: string;
+    location?: string;
+    type?: string;
+    mode?: string;
+    description?: string;
+    company?: string;
+  }
+) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(jobData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Failed to update job' };
+    }
+
+    return { data: data.job as Job, error: null };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
+export async function deleteJob(token: string, jobId: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { error: data.error || 'Failed to delete job' };
+    }
+
+    return { error: null };
+  } catch (error: any) {
+    return { error: error?.message || 'Network request failed' };
+  }
+}
+
 export async function applyJob(token: string, jobId: string) {
   try {
     const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}/apply`, {
@@ -94,6 +184,115 @@ export async function applyJob(token: string, jobId: string) {
 
     return {
       data: data as { message: string; jobId: string; conversationId: string },
+      error: null,
+    };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
+export type JobApplicant = {
+  id: string;
+  username: string;
+  name: string;
+  avatar: string;
+  profession: string;
+  bio: string;
+  email: string;
+  rating?: number;
+  reviewCount?: number;
+  status?: string;
+  appliedAt: string;
+  viewedAt?: string;
+  shortlistedAt?: string;
+  applicationId: string;
+};
+
+export type ApplicantStats = {
+  total: number;
+  viewed: number;
+  shortlisted: number;
+  accepted: number;
+  rejected: number;
+  pending: number;
+  conversionRate: string;
+};
+
+export async function getJobApplicants(token: string, jobId: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}/applicants`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Failed to fetch applicants' };
+    }
+
+    return {
+      data: data.applicants as JobApplicant[],
+      error: null,
+    };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
+export async function getJobApplicantStats(token: string, jobId: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}/applicants/stats`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Failed to fetch stats' };
+    }
+
+    return {
+      data: data.stats as ApplicantStats,
+      error: null,
+    };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
+export async function updateApplicantStatus(
+  token: string,
+  jobId: string,
+  applicationId: string,
+  status: 'pending' | 'viewed' | 'shortlisted' | 'rejected' | 'accepted'
+) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/jobs/${jobId}/applicants/${applicationId}/status`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { data: null, error: data.error || 'Failed to update status' };
+    }
+
+    return {
+      data: data,
       error: null,
     };
   } catch (error: any) {

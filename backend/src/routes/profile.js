@@ -100,15 +100,16 @@ async function recalculateUserRating(reviewedId) {
   });
 
   const averageRating = aggregate._avg.rating ? Number(aggregate._avg.rating.toFixed(1)) : 0;
+  const totalRatings = aggregate._count.rating;
 
   await prisma.user.update({
     where: { id: reviewedId },
-    data: { reviews: averageRating },
+    data: { reviews: totalRatings },
   });
 
   return {
     averageRating,
-    totalRatings: aggregate._count.rating,
+    totalRatings,
   };
 }
 
@@ -125,7 +126,6 @@ function mapUserResponse(user) {
     id: String(user.id),
     email: user.email,
     username: user.username,
-    userCode: user.userCode,
     fullName: user.fullName,
     location: user.location,
     city: user.city,
@@ -591,6 +591,9 @@ router.put('/', verifyToken, async (req, res) => {
       bio,
       avatar,
       skills,
+      coverPhotoUrl,
+      userGoal,
+      socialLinks,
     } = req.body;
 
     if (profession !== undefined) {

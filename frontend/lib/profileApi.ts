@@ -1,71 +1,9 @@
-import { Platform } from 'react-native';
-import * as Linking from 'expo-linking';
-
-const DEFAULT_API_BASE_URL = Platform.select({
-  android: 'http://10.0.2.2:5000',
-  ios: 'http://localhost:5000',
-  web: 'http://localhost:5000',
-  default: 'http://localhost:5000',
-});
-
-const EXPO_TUNNEL_HOST_SUFFIXES = ['.exp.direct', '.expo.dev'];
-
-function getExpoHostIp() {
-  try {
-    const url = Linking.createURL('/');
-    const match = url.match(/^[a-z]+:\/\/([^/:?#]+)/i);
-    return match?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function isExpoTunnelHost(host: string) {
-  const normalizedHost = host.trim().toLowerCase();
-  return EXPO_TUNNEL_HOST_SUFFIXES.some((suffix) => normalizedHost.endsWith(suffix));
-}
-
-function normalizeApiUrl(value: string) {
-  return value.replace(/:\s+(\d+)/g, ':$1').trim();
-}
-
-function parseApiUrlOrNull(value: string) {
-  try {
-    return new URL(normalizeApiUrl(value));
-  } catch {
-    return null;
-  }
-}
-
-function getApiBaseUrl() {
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv) {
-    const parsed = parseApiUrlOrNull(fromEnv);
-    if (parsed) {
-      return parsed.origin;
-    }
-  }
-
-  const expoHostIp = getExpoHostIp();
-  if (
-    expoHostIp &&
-    expoHostIp !== 'localhost' &&
-    expoHostIp !== '127.0.0.1' &&
-    !isExpoTunnelHost(expoHostIp)
-  ) {
-    return `http://${expoHostIp}:5000`;
-  }
-
-  return DEFAULT_API_BASE_URL;
-}
-
-const API_BASE_URL = getApiBaseUrl();
+import { API_BASE_URL } from './apiBaseUrl';
 
 export interface UserProfile {
   id: string;
   email: string;
   username: string;
-  userCode: string;
   fullName: string;
   location: string;
   city: string;
@@ -240,14 +178,22 @@ export async function updateUserStats(
   return authRequest<StatsResponse>('/api/profile/stats', 'PUT', token, updates);
 }
 
+function getMimeType(uri: string): string {
+  const ext = uri.split('.').pop()?.toLowerCase() || '';
+  const map: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
+  return map[ext] || 'image/jpeg';
+}
+
 export async function uploadProfilePhoto(token: string, photoUri: string) {
   const url = `${API_BASE_URL}/api/profile/photo`;
   const formData = new FormData();
+  const mimeType = getMimeType(photoUri);
+  const ext = photoUri.split('.').pop()?.toLowerCase() || 'jpg';
 
   formData.append('photo', {
     uri: photoUri,
-    name: `profile-${Date.now()}.jpg`,
-    type: 'image/jpeg',
+    name: `profile-${Date.now()}.${ext}`,
+    type: mimeType,
   } as any);
 
   try {
@@ -274,11 +220,13 @@ export async function uploadProfilePhoto(token: string, photoUri: string) {
 export async function uploadCoverPhoto(token: string, photoUri: string) {
   const url = `${API_BASE_URL}/api/profile/cover-photo`;
   const formData = new FormData();
+  const mimeType = getMimeType(photoUri);
+  const ext = photoUri.split('.').pop()?.toLowerCase() || 'jpg';
 
   formData.append('photo', {
     uri: photoUri,
-    name: `cover-${Date.now()}.jpg`,
-    type: 'image/jpeg',
+    name: `cover-${Date.now()}.${ext}`,
+    type: mimeType,
   } as any);
 
   try {
