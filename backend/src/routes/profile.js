@@ -75,6 +75,50 @@ function normalizeSocialLinks(value) {
   return JSON.stringify(links);
 }
 
+async function buildPublicProfileResponse(user) {
+  const [verificationSummary, ratingsSummary] = await Promise.all([
+    getVerificationSummary(user.id),
+    prisma.userRating.aggregate({
+      where: { reviewedId: user.id },
+      _avg: { rating: true },
+      _count: { rating: true },
+    }),
+  ]);
+
+  return {
+    id: String(user.id),
+    email: user.email,
+    username: user.username,
+    fullName: user.fullName,
+    location: user.location,
+    city: user.city,
+    pincode: user.pincode,
+    phoneNumber: user.phoneNumber,
+    age: user.age,
+    gender: user.gender,
+    profession: user.profession,
+    bio: user.bio,
+    avatar: user.avatar,
+    coverPhotoUrl: user.coverPhotoUrl || '',
+    userGoal: user.userGoal || '',
+    skills: parseJsonArray(user.skills, []),
+    socialLinks: parseJsonArray(user.socialLinks, []),
+    verificationStatus: verificationSummary.verificationStatus,
+    verificationRequestedAt: verificationSummary.verificationRequestedAt,
+    verificationFee: verificationSummary.verificationFee,
+    ratingsSummary: {
+      averageRating: ratingsSummary._avg.rating ? Number(ratingsSummary._avg.rating.toFixed(1)) : 0,
+      totalRatings: ratingsSummary._count.rating,
+    },
+    stats: {
+      jobsDone: user.jobsDone,
+      reviews: user.reviews,
+      earned: user.earned,
+    },
+    blockedUsers: user.blockedUsers ? user.blockedUsers.map((b) => String(b.blockedId)) : [],
+  };
+}
+
 function normalizeUserGoal(value) {
   const normalized = String(value || '').trim().toUpperCase();
   return ['OFFER_SERVICE', 'HIRE_PROFESSIONALS'].includes(normalized) ? normalized : '';
@@ -162,7 +206,7 @@ router.get('/code/:userCode', async (req, res) => {
     }
 
     return res.json({
-      user: mapUserResponse(user),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to fetch profile.' });
@@ -183,7 +227,7 @@ router.get('/username/:username', async (req, res) => {
     }
 
     return res.json({
-      user: mapUserResponse(user),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to fetch profile.' });
@@ -555,7 +599,7 @@ router.get('/:userId', async (req, res) => {
     }
 
     return res.json({
-      user: mapUserResponse(user),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to fetch profile.' });
@@ -570,7 +614,7 @@ router.get('/', verifyToken, async (req, res) => {
     }
 
     return res.json({
-      user: mapUserResponse(user),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to fetch profile.' });
@@ -654,7 +698,11 @@ router.put('/', verifyToken, async (req, res) => {
 
     return res.json({
       message: 'Profile updated successfully.',
+<<<<<<< HEAD
       user: mapUserResponse(refreshed),
+=======
+      user: await buildPublicProfileResponse(user),
+>>>>>>> 7eb98a14e0a7f9d97b2ee2e2f76cbd2a353dfdb9
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to update profile.' });
@@ -672,7 +720,7 @@ router.delete('/photo', verifyToken, async (req, res) => {
 
     return res.json({
       message: 'Profile photo removed successfully.',
-      user: mapUserResponse(user),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to remove profile photo.' });
@@ -694,7 +742,7 @@ router.post('/cover-photo', verifyToken, upload.single('photo'), async (req, res
 
     return res.status(201).json({
       message: 'Cover photo uploaded successfully.',
-      user: mapUserResponse(user),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to upload cover photo.' });
@@ -710,7 +758,7 @@ router.delete('/cover-photo', verifyToken, async (req, res) => {
 
     return res.json({
       message: 'Cover photo removed successfully.',
-      user: mapUserResponse(user),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to remove cover photo.' });
@@ -736,7 +784,7 @@ router.post('/photo', verifyToken, upload.single('photo'), async (req, res) => {
 
     return res.status(201).json({
       message: 'Profile photo uploaded successfully.',
-      user: mapUserResponse(user),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to upload profile photo.' });

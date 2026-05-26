@@ -2,23 +2,34 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Modal, FlatList, Image, ActivityIndicator, Alert,
-  Animated, Pressable,
+  Animated, Pressable, Dimensions, LayoutAnimation, Platform, UIManager,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Search, MapPin, IndianRupee, Briefcase, X, Plus,
   List, ChevronDown, Clock, Building2,
   GraduationCap, Wifi, Home, Globe, User,
   Pencil, Trash2, ArrowLeft, Send, Eye, MessageCircle,
   CheckCircle, XCircle, Clock as Hourglass,
+  Heart, Award, Star, Code, Palette, Hammer,
+  GanttChart, Users, UserCircle, HelpCircle,
+  ShieldCheck, Mail, Phone, Calendar, Sparkles,
 } from 'lucide-react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import {
   getJobs, postJob, applyJob, getMyJobs, deleteJob, updateJob,
-  getAppliedJobs, withdrawApplication, getJobApplicants,
+  getAppliedJobs, withdrawApplication, getJobApplicants, getUserProfile,
+  updateApplicantStatus,
   type Job, type AppliedJob, type JobApplicant,
 } from '@/lib/jobsApi';
+import { createConversationWithUserId } from '@/lib/chatApi';
 
 const JOB_CATEGORIES = ['All', 'Design', 'Development', 'Marketing', 'Writing', 'Video'];
 const JOB_MODES = [
@@ -30,9 +41,89 @@ const JOB_MODES = [
   { value: 'internship', label: 'Internship', icon: GraduationCap },
 ];
 
+const CATEGORIES = [
+  { id: "tech",         label: "Tech",         icon: Code,        color: "text-blue-400",   bg: "bg-blue-400/10",   border: "border-blue-400/20"   },
+  { id: "creative",    label: "Creative",     icon: Palette,     color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/20" },
+  { id: "engineering", label: "Engineering",  icon: Hammer,      color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/20" },
+  { id: "professional",label: "Professional", icon: GanttChart,  color: "text-emerald-400",bg: "bg-emerald-400/10",border: "border-emerald-400/20" },
+  { id: "freelancer",  label: "Freelancer",   icon: Users,        color: "text-pink-400",   bg: "bg-pink-400/10",   border: "border-pink-400/20"   },
+  { id: "student",     label: "Student",      icon: GraduationCap,color:"text-cyan-400",   bg: "bg-cyan-400/10",   border: "border-cyan-400/20"   },
+  { id: "none",        label: "None",         icon: UserCircle,  color: "text-indigo-400", bg: "bg-indigo-400/10", border: "border-indigo-400/20" },
+  { id: "other",       label: "Other",        icon: HelpCircle,  color: "text-slate-400",   bg: "bg-slate-400/10",   border: "border-slate-400/20"   },
+];
+
+const SUB_PROFESSIONS: Record<string, string[]> = {
+  tech:         ["Software Developer","Web Developer","Data Scientist","AI / ML Engineer","Cybersecurity Analyst","DevOps Engineer","Mobile App Developer"],
+  creative:     ["UI/UX Designer","Graphic Designer","3D Designer","2D Designer","Content Creator","Video Editor","Photographer","Videographer","Artist / Illustrator","Musician"],
+  engineering:  ["Civil Engineer","Mechanical Engineer","Electrical Engineer","Architect","Structural Engineer"],
+  professional: ["Product Manager","Digital Marketer","Doctor","Nurse","Pharmacist","Lawyer","Chartered Accountant","Teacher / Educator","Consultant"],
+};
+
+const CATEGORY_HEX: Record<string, { main: string; bg: string; border: string }> = {
+  tech:         { main: '#60A5FA', bg: '#60A5FA1A', border: '#60A5FA33' },
+  creative:     { main: '#C084FC', bg: '#C084FC1A', border: '#C084FC33' },
+  engineering:  { main: '#FB923C', bg: '#FB923C1A', border: '#FB923C33' },
+  professional: { main: '#34D399', bg: '#34D3991A', border: '#34D39933' },
+  freelancer:   { main: '#F472B6', bg: '#F472B61A', border: '#F472B633' },
+  student:      { main: '#22D3EE', bg: '#22D3EE1A', border: '#22D3EE33' },
+  none:         { main: '#818CF8', bg: '#818CF81A', border: '#818CF833' },
+  other:        { main: '#94A3B8', bg: '#94A3B81A', border: '#94A3B833' },
+};
+
 function getModeIcon(mode: string) {
   const found = JOB_MODES.find((m) => m.value === mode);
   return found?.icon || Briefcase;
+}
+
+function getCategoryLabel(id: string): string {
+  return CATEGORIES.find((c) => c.id === id)?.label || id;
+}
+
+function getCategoryId(label: string): string {
+  return CATEGORIES.find((c) => c.label === label || c.id === label)?.id || 'other';
+}
+
+const AnimatedPressable = ({ style, onPress, disabled, children }: any) => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const animateIn = () => {
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, friction: 8 }).start();
+  };
+  const animateOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 8 }).start();
+  };
+  return (
+    <Animated.View style={[style, { transform: [{ scale }] }]}>
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={disabled}
+        activeOpacity={0.75}
+        onPressIn={animateIn}
+        onPressOut={animateOut}
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+      >
+        {children}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const COVER_HEIGHT = SCREEN_WIDTH / 3;
+const AVATAR_SIZE = 96;
+const AVATAR_OVERLAP = AVATAR_SIZE / 2;
+
+function getSavedApplicantsStorageKey(userId?: string | null) {
+  return userId ? `krovaa.savedApplicants.${userId}` : null;
+}
+
+function getProfileInitials(name?: string) {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return 'U';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
 export default function JobsScreen() {
@@ -53,6 +144,9 @@ export default function JobsScreen() {
 
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
+
+  const insets = useSafeAreaInsets();
+  const compactHeaderTopPadding = Math.max(12, (insets?.top ?? 0) + 8);
   const [showMyListings, setShowMyListings] = useState(false);
   const [myListingsTab, setMyListingsTab] = useState<'applicants' | 'applied'>('applicants');
   const [myJobs, setMyJobs] = useState<Job[]>([]);
@@ -60,17 +154,40 @@ export default function JobsScreen() {
   const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([]);
   const [appliedJobsLoading, setAppliedJobsLoading] = useState(false);
 
+  // Messaging state
+  const [messagingApplicantId, setMessagingApplicantId] = useState<string | null>(null);
+  const [hiringLoading, setHiringLoading] = useState(false);
+  const [showRehireModal, setShowRehireModal] = useState(false);
+  const hireStatusMap = useRef<Record<string, 'accepted' | null>>({});
+
+  // Premium profile modal
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileUser, setProfileUser] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [savedProfiles, setSavedProfiles] = useState<Set<string>>(new Set());
+  const [savedProfilesLoaded, setSavedProfilesLoaded] = useState(false);
+  const profileCache = useRef<Record<string, any>>({});
+  const profileContextRef = useRef<{ applicationId: string; jobId: string } | null>(null);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
   // Applicants dashboard
   const [showApplicantsDashboard, setShowApplicantsDashboard] = useState(false);
   const [dashboardJob, setDashboardJob] = useState<Job | null>(null);
   const [dashboardApplicants, setDashboardApplicants] = useState<JobApplicant[]>([]);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [applicantSubTab, setApplicantSubTab] = useState<'all' | 'saved'>('all');
 
   // Post form
   const [postTitle, setPostTitle] = useState('');
   const [postBudget, setPostBudget] = useState('');
+  const [postBudgetMin, setPostBudgetMin] = useState('');
+  const [postBudgetMax, setPostBudgetMax] = useState('');
   const [postDescription, setPostDescription] = useState('');
   const [postCategory, setPostCategory] = useState('Development');
+  const [postCategoryId, setPostCategoryId] = useState<string | null>(null);
+  const [postSubProfession, setPostSubProfession] = useState('');
+  const [postCustomCategory, setPostCustomCategory] = useState('');
   const [postLocation, setPostLocation] = useState('');
   const [postMode, setPostMode] = useState('remote');
   const [posting, setPosting] = useState(false);
@@ -79,14 +196,22 @@ export default function JobsScreen() {
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editBudget, setEditBudget] = useState('');
+  const [editBudgetMin, setEditBudgetMin] = useState('');
+  const [editBudgetMax, setEditBudgetMax] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editLocation, setEditLocation] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState<string | null>(null);
+  const [editSubProfession, setEditSubProfession] = useState('');
+  const [editCustomCategory, setEditCustomCategory] = useState('');
   const [editMode, setEditMode] = useState('');
   const [editUpdating, setEditUpdating] = useState(false);
+  const [descInputHeight, setDescInputHeight] = useState(100);
 
   // Animations
   const fabScale = useRef(new Animated.Value(1)).current;
+  const fabEntrance = useRef(new Animated.Value(0)).current;
+  const fabBreathe = useRef(new Animated.Value(0)).current;
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -133,6 +258,69 @@ export default function JobsScreen() {
     }).start();
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSavedProfiles = async () => {
+      const storageKey = getSavedApplicantsStorageKey(session?.user?.id);
+      if (!storageKey) {
+        if (isMounted) {
+          setSavedProfiles(new Set());
+          setSavedProfilesLoaded(true);
+        }
+        return;
+      }
+
+      try {
+        const rawSavedProfiles = await AsyncStorage.getItem(storageKey);
+        const savedIds = rawSavedProfiles ? JSON.parse(rawSavedProfiles) : [];
+        if (!isMounted) return;
+        setSavedProfiles(new Set(Array.isArray(savedIds) ? savedIds : []));
+      } catch (error) {
+        console.error('Failed to load saved applicants:', error);
+        if (isMounted) setSavedProfiles(new Set());
+      } finally {
+        if (isMounted) setSavedProfilesLoaded(true);
+      }
+    };
+
+    setSavedProfilesLoaded(false);
+    loadSavedProfiles();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.id]);
+
+  // FAB entrance + breathing
+  useEffect(() => {
+    Animated.spring(fabEntrance, {
+      toValue: 1, useNativeDriver: true, friction: 6, tension: 40,
+    }).start();
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(fabBreathe, { toValue: 1, duration: 3000, useNativeDriver: true }),
+        Animated.timing(fabBreathe, { toValue: 0, duration: 3000, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  // Shimmer pulse for profile skeleton
+  useEffect(() => {
+    if (!profileLoading) return;
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [profileLoading, shimmerAnim]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchJobs(false);
@@ -168,8 +356,9 @@ export default function JobsScreen() {
   const handleFabPress = () => {
     animateFabPress();
     setEditingJob(null);
-    setPostTitle(''); setPostBudget(''); setPostDescription('');
+    setPostTitle(''); setPostBudget(''); setPostBudgetMin(''); setPostBudgetMax(''); setPostDescription('');
     setPostLocation(''); setPostCategory('Development'); setPostMode('remote');
+    setPostCategoryId(null); setPostSubProfession(''); setPostCustomCategory('');
     setShowPostModal(true);
   };
 
@@ -179,14 +368,18 @@ export default function JobsScreen() {
       Alert.alert('Authentication required', 'Please sign in to post a job.');
       return;
     }
-    if (!postTitle.trim() || !postBudget.trim() || !postLocation.trim() || !postDescription.trim()) {
+    const finalBudget = postBudgetMin || postBudgetMax
+      ? [postBudgetMin, postBudgetMax].filter(Boolean).map((p) => `₹${p}`).join(' - ')
+      : postBudget;
+    if (!postTitle.trim() || !finalBudget.trim() || !postLocation.trim() || !postDescription.trim()) {
       Alert.alert('Validation Error', 'All fields are required.');
       return;
     }
+    const derivedType = postCustomCategory.trim() || postSubProfession || getCategoryLabel(postCategoryId || '') || postCategory;
     setPosting(true);
     const { data, error: postError } = await postJob(session.access_token, {
-      title: postTitle, budget: postBudget, location: postLocation,
-      type: postCategory, mode: postMode, description: postDescription,
+      title: postTitle, budget: finalBudget, location: postLocation,
+      type: derivedType, mode: postMode, description: postDescription,
     });
     setPosting(false);
 
@@ -270,9 +463,20 @@ export default function JobsScreen() {
     setEditingJob(job);
     setEditTitle(job.title);
     setEditBudget(job.budget);
+    const parts = job.budget.replace(/₹/g, '').split('-').map((s) => s.trim());
+    if (parts.length === 2) {
+      setEditBudgetMin(parts[0]);
+      setEditBudgetMax(parts[1]);
+    } else {
+      setEditBudgetMin('');
+      setEditBudgetMax('');
+    }
     setEditDescription(job.description);
     setEditLocation(job.location);
     setEditCategory(job.type);
+    setEditCategoryId(getCategoryId(job.type));
+    setEditSubProfession('');
+    setEditCustomCategory('');
     setEditMode(job.mode || 'remote');
     setShowMyListings(false);
     setShowPostModal(true);
@@ -280,14 +484,18 @@ export default function JobsScreen() {
 
   const handleUpdateJob = async () => {
     if (!session?.access_token || !editingJob) return;
-    if (!editTitle.trim() || !editBudget.trim() || !editLocation.trim() || !editDescription.trim()) {
+    const editFinalBudget = editBudgetMin || editBudgetMax
+      ? [editBudgetMin, editBudgetMax].filter(Boolean).map((p) => `₹${p}`).join(' - ')
+      : editBudget;
+    if (!editTitle.trim() || !editFinalBudget.trim() || !editLocation.trim() || !editDescription.trim()) {
       Alert.alert('Validation Error', 'All fields are required.');
       return;
     }
+    const derivedType = editCustomCategory.trim() || editSubProfession || getCategoryLabel(editCategoryId || '') || editCategory;
     setPosting(true);
     const { data } = await updateJob(session.access_token, editingJob.id, {
-      title: editTitle.trim(), budget: editBudget.trim(), location: editLocation.trim(),
-      type: editCategory, mode: editMode, description: editDescription.trim(),
+      title: editTitle.trim(), budget: editFinalBudget.trim(), location: editLocation.trim(),
+      type: derivedType, mode: editMode, description: editDescription.trim(),
     });
     setPosting(false);
     if (data) {
@@ -300,6 +508,188 @@ export default function JobsScreen() {
 
   const handleViewApplicants = (jobId: string) => {
     router.push({ pathname: '/jobs/applicants/[id]' as any, params: { id: jobId } });
+  };
+
+  // Applicants Dashboard
+  const openApplicantsDashboard = async (job: Job) => {
+    if (!session?.access_token) return;
+    setDashboardJob(job);
+    setShowApplicantsDashboard(true);
+    setApplicantSubTab('all');
+    setDashboardLoading(true);
+    const { data } = await getJobApplicants(session.access_token, job.id);
+    if (data) setDashboardApplicants(data);
+    setDashboardLoading(false);
+  };
+
+  const handleWithdraw = (job: AppliedJob) => {
+    Alert.alert('Withdraw Application', `Withdraw your application for "${job.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Withdraw', style: 'destructive',
+        onPress: async () => {
+          if (!session?.access_token) return;
+          await withdrawApplication(session.access_token, job.id);
+          setAppliedJobs((prev) => prev.filter((j) => j.id !== job.id));
+        },
+      },
+    ]);
+  };
+
+  const handleMessageApplicant = async (applicant: JobApplicant) => {
+    if (!session?.access_token || !applicant.id) return;
+    setMessagingApplicantId(applicant.id);
+    try {
+      const { data: convData } = await createConversationWithUserId(
+        session.access_token,
+        applicant.id
+      );
+      if (convData?.conversation) {
+        router.push(`/chat/${convData.conversation.id}`);
+      }
+    } catch (err) {
+      console.error('Error creating conversation:', err);
+    } finally {
+      setMessagingApplicantId(null);
+    }
+  };
+
+  const openProfileModal = async (applicant: JobApplicant, job?: Job | null) => {
+    if (!session?.access_token) return;
+    profileContextRef.current = job ? { applicationId: applicant.applicationId, jobId: job.id } : null;
+    if (applicant.status === 'accepted') hireStatusMap.current[applicant.id] = 'accepted';
+    if (profileCache.current[applicant.id]) {
+      setProfileUser(profileCache.current[applicant.id]);
+      setShowProfileModal(true);
+      setProfileError(null);
+      return;
+    }
+    setShowProfileModal(true);
+    setProfileLoading(true);
+    setProfileError(null);
+    const { data, error } = await getUserProfile(session.access_token, applicant.id);
+    if (error) {
+      setProfileError(error);
+      setProfileUser(null);
+    } else if (data) {
+      profileCache.current[applicant.id] = data;
+      setProfileUser(data);
+    }
+    setProfileLoading(false);
+  };
+
+  const handleMessageFromProfile = async (userId: string) => {
+    if (!session?.access_token || !userId) return;
+    setMessagingApplicantId(userId);
+    try {
+      const { data: convData } = await createConversationWithUserId(session.access_token, userId);
+      if (convData?.conversation) {
+        setShowProfileModal(false);
+        router.push(`/chat/${convData.conversation.id}`);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+    } finally {
+      setMessagingApplicantId(null);
+    }
+  };
+
+  const executeHire = async () => {
+    if (!session?.access_token || !profileUser?.id || !profileContextRef.current) return;
+    const { applicationId, jobId } = profileContextRef.current;
+    setHiringLoading(true);
+    try {
+      const { error: statusError } = await updateApplicantStatus(session.access_token, jobId, applicationId, 'accepted');
+      if (statusError) {
+        Alert.alert('Error', statusError);
+        return;
+      }
+      hireStatusMap.current[profileUser.id] = 'accepted';
+      setDashboardApplicants((prev) =>
+        prev.map((a) => (a.id === profileUser.id ? { ...a, status: 'accepted' as const } : a))
+      );
+      const { data: convData } = await createConversationWithUserId(session.access_token, profileUser.id);
+      setShowProfileModal(false);
+      setProfileError(null);
+      if (convData?.conversation) {
+        router.push(`/chat/${convData.conversation.id}`);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to complete hire action');
+    } finally {
+      setHiringLoading(false);
+    }
+  };
+
+  const handleHireInvite = () => {
+    if (!profileUser?.id) return;
+    const alreadyHired = hireStatusMap.current[profileUser.id] === 'accepted';
+    if (alreadyHired) {
+      setShowRehireModal(true);
+    } else {
+      executeHire();
+    }
+  };
+
+  const handleConfirmRehire = () => {
+    setShowRehireModal(false);
+    executeHire();
+  };
+
+  const handleSaveProfile = () => {
+    if (!profileUser?.id) return;
+    const storageKey = getSavedApplicantsStorageKey(session?.user?.id);
+    if (!storageKey) {
+      Alert.alert('Sign in required', 'Please sign in to save applicant profiles.');
+      return;
+    }
+
+    setSavedProfiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(profileUser.id)) {
+        next.delete(profileUser.id);
+      } else {
+        next.add(profileUser.id);
+      }
+
+      AsyncStorage.setItem(storageKey, JSON.stringify(Array.from(next))).catch((error) => {
+        console.error('Failed to persist saved applicants:', error);
+      });
+
+      return next;
+    });
+  };
+
+  const handleToggleSaveApplicant = (applicantId: string) => {
+    const storageKey = getSavedApplicantsStorageKey(session?.user?.id);
+    if (!storageKey) return;
+
+    setSavedProfiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(applicantId)) {
+        next.delete(applicantId);
+      } else {
+        next.add(applicantId);
+      }
+      AsyncStorage.setItem(storageKey, JSON.stringify(Array.from(next))).catch((error) => {
+        console.error('Failed to persist saved applicants:', error);
+      });
+      return next;
+    });
+  };
+
+  const retryProfileLoad = async () => {
+    if (!session?.access_token || !profileUser?.id) return;
+    setProfileLoading(true);
+    setProfileError(null);
+    const { data, error } = await getUserProfile(session.access_token, profileUser.id);
+    if (error) {
+      setProfileError(error);
+    } else if (data) {
+      profileCache.current[profileUser.id] = data;
+      setProfileUser(data);
+    }
+    setProfileLoading(false);
   };
 
   // Render job card
@@ -507,22 +897,484 @@ export default function JobsScreen() {
       </Animated.View>
 
       {/* FAB */}
-      <Animated.View style={[styles.fab, { transform: [{ scale: fabScale }] }]}>
+      <Animated.View style={[
+        styles.fab,
+        {
+          opacity: fabEntrance,
+          transform: [
+            { scale: fabScale },
+            { scale: fabEntrance.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) },
+            { translateY: fabBreathe.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }) },
+          ],
+        },
+      ]}>
         <TouchableOpacity
           style={styles.fabInner}
           onPress={handleFabPress}
           activeOpacity={0.85}
         >
-          <Plus size={24} color={Colors.white} />
+          <Plus size={20} color={Colors.white} />
         </TouchableOpacity>
       </Animated.View>
+
+      {/* Applicants Dashboard Modal */}
+      <Modal visible={showApplicantsDashboard} transparent animationType="slide" onRequestClose={() => setShowApplicantsDashboard(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { paddingHorizontal: 0, paddingTop: 0 }]}>
+            <View style={[styles.dashHeader, { paddingTop: compactHeaderTopPadding }]}>
+              <TouchableOpacity onPress={() => setShowApplicantsDashboard(false)} style={styles.dashBackBtn}>
+                <ArrowLeft size={22} color={Colors.gray800} />
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dashTitle} numberOfLines={1}>{dashboardJob?.title || 'Applicants'}</Text>
+              </View>
+              <View style={styles.dashCountBadge}>
+                <Text style={styles.dashCountText}>{dashboardApplicants.length}</Text>
+              </View>
+            </View>
+
+            {/* Segmented Sub-Tabs */}
+            <View style={styles.applicantSegmentedWrap}>
+              {(['all', 'saved'] as const).map((tab) => {
+                const isActive = applicantSubTab === tab;
+                const count = tab === 'saved'
+                  ? dashboardApplicants.filter((a) => savedProfiles.has(a.id)).length
+                  : dashboardApplicants.length;
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[styles.applicantSegmentedTab, isActive && styles.applicantSegmentedTabActive]}
+                    onPress={() => setApplicantSubTab(tab)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.applicantSegmentedText, isActive && styles.applicantSegmentedTextActive]}>
+                      {tab === 'all' ? 'All' : 'Saved'}
+                    </Text>
+                    <View style={[styles.applicantSegmentedBadge, isActive && styles.applicantSegmentedBadgeActive]}>
+                      <Text style={[styles.applicantSegmentedBadgeText, isActive && styles.applicantSegmentedBadgeTextActive]}>{count}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {dashboardLoading ? (
+              <View style={[styles.centerState, { paddingVertical: 80 }]}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+              </View>
+            ) : dashboardApplicants.length === 0 ? (
+              <View style={[styles.emptyState, { paddingTop: 60 }]}>
+                <User size={52} color={Colors.gray200} />
+                <Text style={styles.emptyTitle}>No applicants yet</Text>
+                <Text style={styles.emptyDesc}>When people apply, they will appear here.</Text>
+              </View>
+            ) : applicantSubTab === 'saved' && dashboardApplicants.filter((a) => savedProfiles.has(a.id)).length === 0 ? (
+              <View style={[styles.emptyState, { paddingTop: 60 }]}>
+                <Heart size={52} color={Colors.gray200} />
+                <Text style={styles.emptyTitle}>No saved applicants</Text>
+                <Text style={styles.emptyDesc}>Save applicant profiles to quickly find them later.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={applicantSubTab === 'saved'
+                  ? dashboardApplicants.filter((a) => savedProfiles.has(a.id))
+                  : dashboardApplicants
+                }
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
+                renderItem={({ item }) => {
+                  const isSaved = savedProfiles.has(item.id);
+                  return (
+                    <View style={styles.applicantCard}>
+                      <View style={styles.applicantCardTop}>
+                        <Image source={{ uri: item.avatar }} style={styles.applicantAvatar} />
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={styles.applicantName}>{item.name}</Text>
+                          {item.profession ? (
+                            <Text style={styles.applicantBio} numberOfLines={1}>{item.profession}</Text>
+                          ) : null}
+                        </View>
+                        <TouchableOpacity
+                          style={styles.applicantSaveBtn}
+                          onPress={() => handleToggleSaveApplicant(item.id)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Heart
+                            size={16}
+                            color={isSaved ? Colors.primary : Colors.gray400}
+                            fill={isSaved ? Colors.primary : 'transparent'}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.applicantMeta}>
+                        {item.bio ? (
+                          <Text style={styles.applicantDetail} numberOfLines={2}>{item.bio}</Text>
+                        ) : null}
+                        <View style={styles.applicantMetaRow}>
+                          <MapPin size={12} color={Colors.gray500} />
+                          <Text style={styles.applicantDetail}>Applied {item.appliedAt ? new Date(item.appliedAt).toLocaleDateString() : ''}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.applicantCardActions}>
+                        <AnimatedPressable
+                          style={styles.messageBtn}
+                          onPress={() => handleMessageApplicant(item)}
+                          disabled={messagingApplicantId === item.id}
+                        >
+                          {messagingApplicantId === item.id ? (
+                            <ActivityIndicator size="small" color={Colors.primary} />
+                          ) : (
+                            <>
+                              <MessageCircle size={15} color={Colors.primary} />
+                              <Text style={styles.messageBtnText}>Message</Text>
+                            </>
+                          )}
+                        </AnimatedPressable>
+                        <AnimatedPressable
+                          style={styles.viewProfileBtn}
+                          onPress={() => openProfileModal(item, dashboardJob)}
+                        >
+                          <Eye size={15} color={Colors.white} />
+                          <Text style={styles.viewProfileBtnText}>View Profile</Text>
+                        </AnimatedPressable>
+                      </View>
+                    </View>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Premium Profile Modal */}
+      <Modal visible={showProfileModal} transparent animationType="slide" onRequestClose={() => setShowProfileModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { paddingHorizontal: 0, paddingTop: 0 }]}>
+            {/* Header */}
+            {profileLoading ? (
+              <View style={{ flex: 1 }}>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={{ width: '100%', aspectRatio: 3, backgroundColor: Colors.gray200 }} />
+                  <View style={{ alignItems: 'center', marginTop: -AVATAR_OVERLAP }}>
+                    <Animated.View style={[styles.skeletonAvatar, { opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+                  </View>
+                  <View style={{ padding: Spacing.lg, paddingTop: AVATAR_OVERLAP + 12, gap: 14 }}>
+                    {[50, 35, 45].map((w, i) => (
+                      <Animated.View key={i} style={[styles.skeletonBlock, { width: `${w}%`, height: i === 0 ? 24 : i === 1 ? 16 : 14, alignSelf: 'center', opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+                    ))}
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {[1, 2, 3].map((i) => (
+                        <Animated.View key={i} style={[styles.skeletonBlock, { flex: 1, height: 46, opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+                      ))}
+                    </View>
+                    <View style={{ gap: 6 }}>
+                      <Animated.View style={[styles.skeletonBlock, { height: 12, opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+                      <Animated.View style={[styles.skeletonBlock, { width: '90%', height: 12, opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+                      <Animated.View style={[styles.skeletonBlock, { width: '70%', height: 12, opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+                    </View>
+                    <View>
+                      <Animated.View style={[styles.skeletonBlock, { width: 80, height: 14, marginBottom: 10, opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {[1, 2, 3, 4].map((i) => (
+                          <Animated.View key={i} style={[styles.skeletonBlock, { width: 70, height: 28, opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }]} />
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                </ScrollView>
+              </View>
+            ) : profileError ? (
+              <View style={[styles.centerState, { flex: 1 }]}>
+                <Text style={styles.errorText}>{profileError}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={retryProfileLoad}>
+                  <Text style={styles.retryBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : profileUser ? (
+              <>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: Spacing.lg }}>
+                    <View style={styles.profileHeroWrap}>
+                      {/* Cover Image */}
+                      <View style={styles.profileCoverSection}>
+                        {profileUser.coverPhotoUrl ? (
+                          <Image
+                            source={{ uri: profileUser.coverPhotoUrl }}
+                            style={styles.profileCoverImage}
+                          />
+                        ) : (
+                          <View style={styles.profileCoverFallback}>
+                            <User size={42} color={Colors.primary} />
+                            <Text style={styles.profileCoverFallbackText}>No cover photo</Text>
+                          </View>
+                        )}
+
+                        <TouchableOpacity
+                          onPress={() => { setShowProfileModal(false); setProfileError(null); }}
+                          style={[styles.profileBackButton, { top: compactHeaderTopPadding }]}
+                          activeOpacity={0.8}
+                        >
+                          <ArrowLeft size={22} color={Colors.gray900} />
+                        </TouchableOpacity>
+
+                        <View style={styles.profileAvatarWrap}>
+                          <View style={styles.profileAvatarShadow}>
+                            {profileUser.avatar ? (
+                              <Animated.View style={{ transform: [{ scale: 1 }] }}>
+                                <Image
+                                  source={{ uri: profileUser.avatar }}
+                                  style={styles.profileModalAvatar}
+                                />
+                              </Animated.View>
+                            ) : (
+                              <Animated.View style={{ transform: [{ scale: 1 }] }}>
+                                <View style={styles.profileAvatarFallback}>
+                                  <Text style={styles.profileAvatarFallbackText}>{getProfileInitials(profileUser.fullName)}</Text>
+                                </View>
+                              </Animated.View>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Main Content Card */}
+                    <View style={styles.profileContentCard}>
+                      <View style={styles.profileInfoSection}>
+                        <Text style={styles.profileName} numberOfLines={1}>{profileUser.fullName || 'Unknown'}</Text>
+                        {profileUser.profession ? (
+                          <Text style={styles.profileProfession} numberOfLines={1}>
+                            {profileUser.profession.charAt(0).toUpperCase() + profileUser.profession.slice(1)}
+                          </Text>
+                        ) : null}
+                        <View style={styles.profileLocationRow}>
+                          <MapPin size={14} color={Colors.gray500} />
+                          <Text style={styles.profileLocationText} numberOfLines={1}>
+                            {profileUser.location || 'Location not set'}
+                          </Text>
+                        </View>
+
+                        <View style={styles.profileBadgeRow}>
+                          <View style={styles.profileBadge}>
+                            <User size={12} color={Colors.primary} />
+                            <Text style={styles.profileBadgeText}>{profileUser.username || 'No username'}</Text>
+                          </View>
+                          <View style={styles.profileBadge}>
+                            <ShieldCheck size={12} color={Colors.primary} />
+                            <Text style={styles.profileBadgeText}>
+                              {profileUser.verificationStatus
+                                ? profileUser.verificationStatus.charAt(0).toUpperCase() + profileUser.verificationStatus.slice(1)
+                                : 'None'}
+                            </Text>
+                          </View>
+                          <View style={styles.profileBadge}>
+                            <Star size={12} color={Colors.warning} />
+                            <Text style={styles.profileBadgeText}>
+                              {profileUser.ratingsSummary
+                                ? `${profileUser.ratingsSummary.averageRating || 0} · ${profileUser.ratingsSummary.totalRatings || 0}`
+                                : '0 · 0'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.profileSection}>
+                          <Text style={styles.profileSectionTitle}>Quick Info</Text>
+                          <View style={styles.quickInfoList}>
+                            <View style={styles.quickInfoItem}>
+                              <Mail size={14} color={Colors.primary} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.quickInfoLabel}>Email</Text>
+                                <Text style={styles.quickInfoValue} numberOfLines={1}>{profileUser.email || 'Not set'}</Text>
+                              </View>
+                            </View>
+                            <View style={styles.quickInfoItem}>
+                              <Phone size={14} color={Colors.primary} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.quickInfoLabel}>Phone</Text>
+                                <Text style={styles.quickInfoValue} numberOfLines={1}>{profileUser.phoneNumber || 'Not set'}</Text>
+                              </View>
+                            </View>
+                            <View style={styles.quickInfoItem}>
+                              <Calendar size={14} color={Colors.primary} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.quickInfoLabel}>Age / Gender</Text>
+                                <Text style={styles.quickInfoValue} numberOfLines={1}>
+                                  {profileUser.age ?? 'Not set'}{profileUser.gender ? ` · ${profileUser.gender}` : ''}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.quickInfoItem}>
+                              <Sparkles size={14} color={Colors.primary} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.quickInfoLabel}>Goal</Text>
+                                <Text style={styles.quickInfoValue} numberOfLines={1}>
+                                  {profileUser.userGoal === 'OFFER_SERVICE'
+                                    ? 'Offering services'
+                                    : profileUser.userGoal === 'HIRE_PROFESSIONALS'
+                                      ? 'Hiring professionals'
+                                      : 'Not set'}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* About */}
+                        {profileUser.bio ? (
+                          <View style={styles.profileSection}>
+                            <Text style={styles.profileSectionTitle}>About</Text>
+                            <Text style={styles.bioText}>{profileUser.bio}</Text>
+                          </View>
+                        ) : null}
+
+                        {/* Skills */}
+                        {profileUser.skills?.length > 0 ? (
+                          <View style={styles.profileSection}>
+                            <Text style={styles.profileSectionTitle}>Skills</Text>
+                            <View style={styles.skillsWrap}>
+                              {profileUser.skills.map((skill: string, index: number) => (
+                                <View key={index} style={styles.skillChip}>
+                                  <Text style={styles.skillChipText}>{skill}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        ) : null}
+
+                        {/* Portfolio / Social Links */}
+                        {profileUser.socialLinks?.length > 0 && (
+                          <View style={styles.profileSection}>
+                            <Text style={styles.profileSectionTitle}>Links</Text>
+                            <View style={styles.skillsWrap}>
+                              {profileUser.socialLinks.map((link: { platform: string; url: string }, index: number) => (
+                                <TouchableOpacity key={index} style={styles.skillChip} onPress={() => {}} activeOpacity={0.7}>
+                                  <Globe size={12} color={Colors.primary} />
+                                  <Text style={styles.skillChipText}>{link.platform || link.url}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+
+                        {/* Activity Metrics */}
+                        {profileUser.stats ? (
+                          <View style={styles.profileSection}>
+                            <Text style={styles.profileSectionTitle}>Activity</Text>
+                            <View style={styles.activityGrid}>
+                              <View style={styles.activityCard}>
+                                <Briefcase size={20} color={Colors.primary} />
+                                <Text style={styles.activityValue}>{profileUser.stats.jobsDone || 0}</Text>
+                                <Text style={styles.activityLabel}>Projects</Text>
+                              </View>
+                              <View style={styles.activityCard}>
+                                <Star size={20} color={Colors.warning} />
+                                <Text style={styles.activityValue}>{profileUser.stats.reviews || 0}</Text>
+                                <Text style={styles.activityLabel}>Reviews</Text>
+                              </View>
+                              <View style={styles.activityCard}>
+                                <IndianRupee size={20} color={Colors.secondary} />
+                                <Text style={styles.activityValue}>{profileUser.stats.earned || 0}</Text>
+                                <Text style={styles.activityLabel}>Earned</Text>
+                              </View>
+                            </View>
+                          </View>
+                        ) : null}
+
+                        <View style={{ height: 16 }} />
+                      </View>
+                    </View>
+                </ScrollView>
+
+                {/* Sticky Footer Action Bar */}
+                <View style={styles.profileStickyFooter}>
+                  <AnimatedPressable
+                    style={styles.profileActionOutline}
+                    onPress={() => handleMessageFromProfile(profileUser.id)}
+                    disabled={messagingApplicantId === profileUser.id}
+                  >
+                    {messagingApplicantId === profileUser.id ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                    ) : (
+                      <>
+                        <MessageCircle size={16} color={Colors.primary} />
+                        <Text style={styles.profileActionOutlineText}>Message</Text>
+                      </>
+                    )}
+                  </AnimatedPressable>
+                  <AnimatedPressable
+                    style={[
+                      styles.profileActionPrimary,
+                      hireStatusMap.current[profileUser.id] === 'accepted' && styles.profileActionHired,
+                    ]}
+                    onPress={handleHireInvite}
+                    disabled={hiringLoading}
+                  >
+                    {hiringLoading ? (
+                      <ActivityIndicator size="small" color={Colors.white} />
+                    ) : hireStatusMap.current[profileUser.id] === 'accepted' ? (
+                      <>
+                        <CheckCircle size={16} color={Colors.white} />
+                        <Text style={styles.profileActionPrimaryText}>Hired</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Award size={16} color={Colors.white} />
+                        <Text style={styles.profileActionPrimaryText}>Hire</Text>
+                      </>
+                    )}
+                  </AnimatedPressable>
+                  {(() => {
+                    const isSaved = savedProfilesLoaded && !!profileUser?.id && savedProfiles.has(profileUser.id);
+                    return (
+                      <AnimatedPressable
+                        style={[styles.profileActionOutline, isSaved && styles.profileActionSaved]}
+                        onPress={handleSaveProfile}
+                        disabled={!savedProfilesLoaded}
+                      >
+                        <Heart
+                          size={16}
+                          color={isSaved ? Colors.white : Colors.gray600}
+                          fill={isSaved ? Colors.white : 'transparent'}
+                        />
+                        <Text style={[styles.profileActionOutlineText, isSaved && { color: Colors.white }]}>
+                          {isSaved ? 'Saved' : 'Save'}
+                        </Text>
+                      </AnimatedPressable>
+                    );
+                  })()}
+                </View>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Rehire Confirmation Modal */}
+      <Modal visible={showRehireModal} transparent animationType="fade" onRequestClose={() => setShowRehireModal(false)}>
+        <View style={styles.rehireOverlay}>
+          <View style={styles.rehireModal}>
+            <Text style={styles.rehireTitle}>Already Hired</Text>
+            <Text style={styles.rehireBody}>
+              This applicant has already been hired. Do you want to continue the hiring process again?
+            </Text>
+            <View style={styles.rehireActions}>
+              <TouchableOpacity style={styles.rehireCancelBtn} onPress={() => setShowRehireModal(false)}>
+                <Text style={styles.rehireCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.rehireConfirmBtn} onPress={handleConfirmRehire}>
+                <Text style={styles.rehireConfirmText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Post / Edit Job Modal */}
       <Modal visible={showPostModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPostModal(false)}>
         <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { paddingTop: compactHeaderTopPadding + 6 }]}>
             <Text style={styles.modalTitle}>{editingJob ? 'Edit Job' : 'Post a Job'}</Text>
-            <TouchableOpacity onPress={() => { setShowPostModal(false); setEditingJob(null); }}>
+            <TouchableOpacity onPress={() => { setShowPostModal(false); setEditingJob(null); }} style={{ padding: 10 }}>
               <X size={24} color={Colors.gray700} />
             </TouchableOpacity>
           </View>
@@ -537,82 +1389,189 @@ export default function JobsScreen() {
             />
 
             <Text style={styles.fieldLabel}>Category</Text>
-            <View style={styles.categoryRow}>
-              {['Design', 'Development', 'Marketing', 'Writing', 'Video'].map((cat) => {
-                const isActive = editingJob ? editCategory === cat : postCategory === cat;
+            <View style={styles.catGrid}>
+              {CATEGORIES.map((cat) => {
+                const CatIcon = cat.icon;
+                const activeId = editingJob ? editCategoryId : postCategoryId;
+                const isActive = activeId === cat.id;
+                const hex = CATEGORY_HEX[cat.id];
                 return (
                   <TouchableOpacity
-                    key={cat}
-                    style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                    key={cat.id}
+                    style={[
+                      styles.catCard,
+                      { borderColor: hex.border, backgroundColor: hex.bg },
+                      isActive && { borderColor: hex.main, backgroundColor: hex.main + '25' },
+                    ]}
+                    activeOpacity={0.7}
                     onPress={() => {
-                      if (editingJob) setEditCategory(cat);
-                      else setPostCategory(cat);
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      if (editingJob) {
+                        setEditCategoryId(cat.id);
+                        setEditSubProfession('');
+                        setEditCustomCategory('');
+                      } else {
+                        setPostCategoryId(cat.id);
+                        setPostCategory(getCategoryLabel(cat.id));
+                        setPostSubProfession('');
+                        setPostCustomCategory('');
+                      }
                     }}
                   >
-                    <Text style={[styles.categoryText, isActive && styles.categoryTextActive]}>{cat}</Text>
+                    <CatIcon size={22} color={hex.main} />
+                    <Text style={[styles.catCardLabel, { color: hex.main }]}>{cat.label}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
+            {(editingJob ? editCategoryId : postCategoryId) ? (
+              <View style={styles.subSection}>
+                {(() => {
+                  const activeId = editingJob ? editCategoryId! : postCategoryId!;
+                  const subs = SUB_PROFESSIONS[activeId];
+                  const hex = CATEGORY_HEX[activeId];
+                  if (subs) {
+                    const selected = editingJob ? editSubProfession : postSubProfession;
+                    return (
+                      <>
+                        <Text style={styles.subLabel}>Sub-Profession</Text>
+                        <View style={styles.subChipsRow}>
+                          {subs.map((prof) => {
+                            const isSelected = selected === prof;
+                            return (
+                              <TouchableOpacity
+                                key={prof}
+                                style={[
+                                  styles.subChip,
+                                  { borderColor: hex.border, backgroundColor: hex.bg },
+                                  isSelected && { borderColor: hex.main, backgroundColor: hex.main },
+                                ]}
+                                onPress={() => {
+                                  if (editingJob) setEditSubProfession(isSelected ? '' : prof);
+                                  else setPostSubProfession(isSelected ? '' : prof);
+                                }}
+                              >
+                                <Text style={[
+                                  styles.subChipText,
+                                  { color: hex.main },
+                                  isSelected && { color: '#FFFFFF' },
+                                ]}>{prof}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </>
+                    );
+                  }
+                  const customVal = editingJob ? editCustomCategory : postCustomCategory;
+                  return (
+                    <>
+                      <Text style={styles.subLabel}>Specify Category</Text>
+                      <TextInput
+                        style={styles.fieldInput}
+                        placeholder="Type your category..."
+                        placeholderTextColor={Colors.gray400}
+                        value={customVal}
+                        onChangeText={(v) => {
+                          if (editingJob) setEditCustomCategory(v);
+                          else setPostCustomCategory(v);
+                        }}
+                      />
+                    </>
+                  );
+                })()}
+              </View>
+            ) : null}
+
             <Text style={styles.fieldLabel}>Work Mode</Text>
-            <View style={styles.categoryRow}>
+            <View style={styles.modeCardGrid}>
               {JOB_MODES.filter((m) => m.value !== 'ALL_MODES').map((mode) => {
                 const isActive = editingJob ? editMode === mode.value : postMode === mode.value;
                 const ModeIcon = mode.icon;
                 return (
                   <TouchableOpacity
                     key={mode.value}
-                    style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                    style={[styles.modeCard, isActive && styles.modeCardActive]}
+                    activeOpacity={0.7}
                     onPress={() => {
                       if (editingJob) setEditMode(mode.value);
                       else setPostMode(mode.value);
                     }}
                   >
-                    <ModeIcon size={13} color={isActive ? Colors.white : Colors.gray600} />
-                    <Text style={[styles.categoryText, isActive && styles.categoryTextActive]}>{mode.label}</Text>
+                    <ModeIcon size={20} color={isActive ? Colors.white : Colors.primary} />
+                    <Text style={[styles.modeCardLabel, isActive && styles.modeCardLabelActive]}>{mode.label}</Text>
+                    {isActive && <View style={styles.modeCardCheck} />}
                   </TouchableOpacity>
                 );
               })}
             </View>
 
             <Text style={styles.fieldLabel}>Budget Range</Text>
-            <TextInput
-              style={styles.fieldInput}
-              placeholder="e.g. ₹500 - ₹1,000"
-              placeholderTextColor={Colors.gray400}
-              value={editingJob ? editBudget : postBudget}
-              onChangeText={editingJob ? setEditBudget : setPostBudget}
-            />
+            <View style={styles.budgetCard}>
+              <IndianRupee size={18} color={Colors.secondary} style={{ marginRight: 4 }} />
+              <View style={styles.budgetDivider} />
+              <TextInput
+                style={styles.budgetInput}
+                placeholder="Min"
+                placeholderTextColor={Colors.gray400}
+                keyboardType="numeric"
+                value={editingJob ? editBudgetMin : postBudgetMin}
+                onChangeText={editingJob ? setEditBudgetMin : setPostBudgetMin}
+              />
+              <Text style={styles.budgetSep}>—</Text>
+              <TextInput
+                style={styles.budgetInput}
+                placeholder="Max"
+                placeholderTextColor={Colors.gray400}
+                keyboardType="numeric"
+                value={editingJob ? editBudgetMax : postBudgetMax}
+                onChangeText={editingJob ? setEditBudgetMax : setPostBudgetMax}
+              />
+            </View>
 
             <Text style={styles.fieldLabel}>Location</Text>
-            <TextInput
-              style={styles.fieldInput}
-              placeholder="e.g. Remote or San Francisco, CA"
-              placeholderTextColor={Colors.gray400}
-              value={editingJob ? editLocation : postLocation}
-              onChangeText={editingJob ? setEditLocation : setPostLocation}
-            />
+            <View style={styles.locationCard}>
+              <MapPin size={18} color={Colors.primary} />
+              <TextInput
+                style={styles.locationInputField}
+                placeholder="e.g. Remote or San Francisco, CA"
+                placeholderTextColor={Colors.gray400}
+                value={editingJob ? editLocation : postLocation}
+                onChangeText={editingJob ? setEditLocation : setPostLocation}
+              />
+            </View>
 
             <Text style={styles.fieldLabel}>Description</Text>
-            <TextInput
-              style={[styles.fieldInput, styles.fieldTextarea]}
-              placeholder="Describe the job requirements..."
-              placeholderTextColor={Colors.gray400}
-              value={editingJob ? editDescription : postDescription}
-              onChangeText={editingJob ? setEditDescription : setPostDescription}
-              multiline
-              numberOfLines={5}
-              textAlignVertical="top"
-            />
+            <View style={styles.descCard}>
+              <TextInput
+                style={[styles.descInput, { height: descInputHeight }]}
+                placeholder="Describe the job requirements..."
+                placeholderTextColor={Colors.gray400}
+                value={editingJob ? editDescription : postDescription}
+                onChangeText={editingJob ? setEditDescription : setPostDescription}
+                multiline
+                textAlignVertical="top"
+                onContentSizeChange={(e) => {
+                  setDescInputHeight(Math.max(100, e.nativeEvent.contentSize.height));
+                }}
+              />
+              <View style={styles.descFooter}>
+                <Text style={styles.descHelper}>Tips for better job posts</Text>
+                <Text style={styles.descCounter}>
+                  {(editingJob ? editDescription : postDescription).length}/500
+                </Text>
+              </View>
+            </View>
 
             <TouchableOpacity
-              style={[styles.submitBtn, posting && { backgroundColor: Colors.gray400 }]}
+              style={[styles.submitBtn, posting && styles.submitBtnDisabled]}
               onPress={editingJob ? handleUpdateJob : handlePostJob}
               disabled={posting}
+              activeOpacity={0.85}
             >
               {posting ? (
-                <ActivityIndicator color={Colors.white} />
+                <ActivityIndicator color={Colors.white} size="small" />
               ) : (
                 <Text style={styles.submitBtnText}>{editingJob ? 'Update Job' : 'Post Job'}</Text>
               )}
@@ -624,66 +1583,171 @@ export default function JobsScreen() {
       {/* My Listings Modal */}
       <Modal visible={showMyListings} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowMyListings(false)}>
         <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { paddingTop: Math.max(10, (insets?.top ?? 0) + 4) }]}>
             <Text style={styles.modalTitle}>My Listings</Text>
             <TouchableOpacity onPress={() => setShowMyListings(false)}>
               <X size={24} color={Colors.gray700} />
             </TouchableOpacity>
           </View>
-          {myJobsLoading ? (
-            <View style={styles.centerState}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-            </View>
-          ) : myJobs.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Briefcase size={52} color={Colors.gray200} />
-              <Text style={styles.emptyTitle}>No listings yet</Text>
-              <Text style={styles.emptyDesc}>Jobs you post will appear here.</Text>
-            </View>
+
+          {/* Segmented tabs */}
+          <View style={styles.segmentedWrap}>
+            <TouchableOpacity
+              style={[styles.segmentedTab, myListingsTab === 'applicants' && styles.segmentedTabActive]}
+              onPress={() => setMyListingsTab('applicants')}
+              activeOpacity={0.7}
+            >
+              <User size={14} color={myListingsTab === 'applicants' ? Colors.white : Colors.gray600} />
+              <Text style={[styles.segmentedTabText, myListingsTab === 'applicants' && styles.segmentedTabTextActive]}>
+                Applicants
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.segmentedTab, myListingsTab === 'applied' && styles.segmentedTabActive]}
+              onPress={() => setMyListingsTab('applied')}
+              activeOpacity={0.7}
+            >
+              <Send size={14} color={myListingsTab === 'applied' ? Colors.white : Colors.gray600} />
+              <Text style={[styles.segmentedTabText, myListingsTab === 'applied' && styles.segmentedTabTextActive]}>
+                Applied
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {myListingsTab === 'applicants' ? (
+            myJobsLoading ? (
+              <View style={styles.centerState}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+              </View>
+            ) : myJobs.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Briefcase size={52} color={Colors.gray200} />
+                <Text style={styles.emptyTitle}>No listings yet</Text>
+                <Text style={styles.emptyDesc}>Jobs you post will appear here.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={myJobs}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.myJobCard}
+                    activeOpacity={0.85}
+                    onPress={() => openApplicantsDashboard(item)}
+                  >
+                    <View style={styles.myJobCardTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.jobTitle} numberOfLines={1}>{item.title}</Text>
+                        <Text style={styles.jobCompany}>{item.company}</Text>
+                      </View>
+                      <View style={styles.myJobActions}>
+                        <TouchableOpacity
+                          style={styles.myJobActionBtn}
+                          onPress={() => handleEditMyJob(item)}
+                        >
+                          <Pencil size={16} color={Colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.myJobActionBtn}
+                          onPress={() => handleDeleteMyJob(item)}
+                        >
+                          <Trash2 size={16} color={Colors.error} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <View style={styles.jobMeta}>
+                      <View style={styles.jobMetaItem}>
+                        <IndianRupee size={13} color={Colors.secondary} />
+                        <Text style={styles.jobMetaText}>{item.budget}</Text>
+                      </View>
+                      <View style={styles.jobMetaItem}>
+                        <MapPin size={13} color={Colors.gray500} />
+                        <Text style={styles.jobMetaText}>{item.location}</Text>
+                      </View>
+                      <View style={styles.jobMetaItem}>
+                        <User size={13} color={Colors.gray500} />
+                        <Text style={styles.jobMetaText}>{item.applicantCount} applicants</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            )
           ) : (
-            <FlatList
-              data={myJobs}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
-              renderItem={({ item }) => (
-                <View style={styles.myJobCard}>
-                  <View style={styles.myJobCardTop}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.jobTitle} numberOfLines={1}>{item.title}</Text>
-                      <Text style={styles.jobCompany}>{item.company}</Text>
+            appliedJobsLoading ? (
+              <View style={styles.centerState}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+              </View>
+            ) : appliedJobs.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Send size={52} color={Colors.gray200} />
+                <Text style={styles.emptyTitle}>No applications yet</Text>
+                <Text style={styles.emptyDesc}>You haven't applied to any jobs yet.</Text>
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={() => { setShowMyListings(false); }}
+                >
+                  <Text style={styles.retryBtnText}>Browse Jobs</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <FlatList
+                data={appliedJobs}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
+                renderItem={({ item }) => {
+                  const statusColors: Record<string, { bg: string; text: string }> = {
+                    pending: { bg: '#FEF3C7', text: '#92400E' },
+                    viewed: { bg: '#DBEAFE', text: '#1E40AF' },
+                    shortlisted: { bg: '#DBEAFE', text: '#1E40AF' },
+                    accepted: { bg: '#DCFCE7', text: '#166534' },
+                    rejected: { bg: '#FEE2E2', text: '#991B1B' },
+                  };
+                  const colors = statusColors[item.applicationStatus] || statusColors.pending;
+                  const statusLabel = item.applicationStatus.charAt(0).toUpperCase() + item.applicationStatus.slice(1);
+                  const StatusIcon = item.applicationStatus === 'accepted' ? CheckCircle :
+                    item.applicationStatus === 'rejected' ? XCircle : Hourglass;
+
+                  return (
+                    <View style={styles.appliedJobCard}>
+                      <View style={styles.appliedJobCardTop}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.jobTitle} numberOfLines={1}>{item.title}</Text>
+                          <Text style={styles.jobCompany}>{item.company}</Text>
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
+                          <StatusIcon size={12} color={colors.text} />
+                          <Text style={[styles.statusBadgeText, { color: colors.text }]}>{statusLabel}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.jobMeta}>
+                        <View style={styles.jobMetaItem}>
+                          <IndianRupee size={13} color={Colors.secondary} />
+                          <Text style={styles.jobMetaText}>{item.budget}</Text>
+                        </View>
+                        <View style={styles.jobMetaItem}>
+                          <MapPin size={13} color={Colors.gray500} />
+                          <Text style={styles.jobMetaText}>{item.location}</Text>
+                        </View>
+                        <View style={styles.jobMetaItem}>
+                          <Clock size={13} color={Colors.gray500} />
+                          <Text style={styles.jobMetaText}>{item.posted}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.appliedJobFooter}>
+                        <TouchableOpacity onPress={() => handleWithdraw(item)} activeOpacity={0.7}>
+                          <Text style={styles.withdrawText}>Withdraw Application</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.viewJobBtn} activeOpacity={0.7}>
+                          <Text style={styles.viewJobBtnText}>View Job</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <View style={styles.myJobActions}>
-                      <TouchableOpacity
-                        style={styles.myJobActionBtn}
-                        onPress={() => handleEditMyJob(item)}
-                      >
-                        <Pencil size={16} color={Colors.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.myJobActionBtn}
-                        onPress={() => handleDeleteMyJob(item)}
-                      >
-                        <Trash2 size={16} color={Colors.error} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  <View style={styles.jobMeta}>
-                    <View style={styles.jobMetaItem}>
-                      <IndianRupee size={13} color={Colors.secondary} />
-                      <Text style={styles.jobMetaText}>{item.budget}</Text>
-                    </View>
-                    <View style={styles.jobMetaItem}>
-                      <MapPin size={13} color={Colors.gray500} />
-                      <Text style={styles.jobMetaText}>{item.location}</Text>
-                    </View>
-                    <View style={styles.jobMetaItem}>
-                      <User size={13} color={Colors.gray500} />
-                      <Text style={styles.jobMetaText}>{item.applicantCount} applicants</Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-            />
+                  );
+                }}
+              />
+            )
           )}
         </View>
       </Modal>
@@ -979,16 +2043,14 @@ const styles = StyleSheet.create({
   // FAB
   fab: {
     position: 'absolute',
-    bottom: 96,
+    bottom: 24,
     right: Spacing.lg,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
     elevation: 8,
     shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    zIndex: 50,
   },
   fabInner: {
     width: 56,
@@ -1046,6 +2108,10 @@ const styles = StyleSheet.create({
   },
 
   // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
   modalContainer: {
     flex: 1,
     backgroundColor: Colors.white,
@@ -1055,7 +2121,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
-    paddingTop: 60,
     paddingBottom: Spacing.md,
     borderBottomWidth: 0.5,
     borderBottomColor: Colors.gray200,
@@ -1075,7 +2140,6 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.semiBold as any,
     color: Colors.gray700,
     marginBottom: 6,
-    marginTop: Spacing.sm,
   },
   fieldInput: {
     borderWidth: 1.5,
@@ -1096,19 +2160,211 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+
+  // Category grid
+  catGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  catCard: {
+    width: '47%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    gap: 8,
+  },
+  catCardLabel: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    textAlign: 'center',
+  },
+
+  // Sub-profession section
+  subSection: {
+    marginTop: Spacing.md,
+    gap: 10,
+  },
+  subLabel: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray700,
+  },
+  subChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  subChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1.5,
+  },
+  subChipText: {
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.medium as any,
+  },
+
+  // Work Mode cards
+  modeCardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  modeCard: {
+    width: '30%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '25',
+    backgroundColor: Colors.primary + '0A',
+    gap: 8,
+    position: 'relative',
+  },
+  modeCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary,
+    elevation: 4,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+  modeCardLabel: {
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.primary,
+    textAlign: 'center',
+  },
+  modeCardLabelActive: {
+    color: Colors.white,
+  },
+  modeCardCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.white,
+  },
+
+  // Budget card
+  budgetCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.secondary + '0A',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.secondary + '20',
+    paddingHorizontal: 14,
+    height: 52,
+    gap: 8,
+  },
+  budgetDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Colors.secondary + '30',
+    marginRight: 4,
+  },
+  budgetInput: {
+    flex: 1,
+    fontSize: FontSizes.md,
+    color: Colors.gray900,
+    padding: 0,
+    height: 48,
+  },
+  budgetSep: {
+    fontSize: FontSizes.md,
+    color: Colors.gray400,
+    fontWeight: FontWeights.semiBold as any,
+    paddingHorizontal: 2,
+  },
+
+  // Location card
+  locationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary + '0A',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '20',
+    paddingHorizontal: 14,
+    height: 52,
+    gap: 10,
+  },
+  locationInputField: {
+    flex: 1,
+    fontSize: FontSizes.md,
+    color: Colors.gray900,
+    padding: 0,
+    height: 48,
+  },
+
+  // Description card
+  descCard: {
+    backgroundColor: Colors.gray50,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.gray200,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    gap: 4,
+  },
+  descInput: {
+    fontSize: FontSizes.md,
+    color: Colors.gray900,
+    padding: 0,
+    minHeight: 100,
+    lineHeight: 22,
+  },
+  descFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 10,
+    paddingTop: 4,
+  },
+  descHelper: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray400,
+  },
+  descCounter: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray400,
+    fontWeight: FontWeights.medium as any,
+  },
+
   submitBtn: {
     backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    height: 50,
+    borderRadius: BorderRadius.full,
+    height: 54,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: Spacing.lg,
     marginBottom: Spacing.xxl,
+    elevation: 4,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  submitBtnDisabled: {
+    backgroundColor: Colors.gray300,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   submitBtnText: {
     color: Colors.white,
     fontSize: FontSizes.lg,
-    fontWeight: FontWeights.semiBold as any,
+    fontWeight: FontWeights.bold as any,
   },
 
   // My Listings
@@ -1139,5 +2395,667 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // Segmented tabs
+  segmentedWrap: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.gray100,
+    borderRadius: BorderRadius.md,
+    padding: 3,
+  },
+  segmentedTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.sm,
+  },
+  segmentedTabActive: {
+    backgroundColor: Colors.primary,
+    elevation: 2,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  segmentedTabText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray600,
+  },
+  segmentedTabTextActive: {
+    color: Colors.white,
+  },
+
+  // Applied jobs
+  appliedJobCard: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  appliedJobCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusBadgeText: {
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  appliedJobFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.gray200,
+  },
+  withdrawText: {
+    fontSize: FontSizes.sm,
+    color: Colors.error,
+    fontWeight: FontWeights.medium as any,
+  },
+  viewJobBtn: {
+    backgroundColor: Colors.gray100,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+  },
+  viewJobBtnText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray700,
+  },
+
+  // Applicants Dashboard
+  dashHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.gray200,
+  },
+  dashBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dashTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+  },
+  dashCountBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.full,
+    minWidth: 28,
+    height: 28,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dashCountText: {
+    color: Colors.white,
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.bold as any,
+  },
+  applicantSegmentedWrap: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.gray200,
+  },
+  applicantSegmentedTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.gray100,
+  },
+  applicantSegmentedTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  applicantSegmentedText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray600,
+  },
+  applicantSegmentedTextActive: {
+    color: Colors.white,
+  },
+  applicantSegmentedBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.gray200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  applicantSegmentedBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  applicantSegmentedBadgeText: {
+    fontSize: 11,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray600,
+  },
+  applicantSegmentedBadgeTextActive: {
+    color: Colors.white,
+  },
+  applicantCard: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  applicantCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  applicantSaveBtn: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  applicantAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.gray200,
+  },
+  applicantName: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray900,
+  },
+  applicantBio: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray500,
+    marginTop: 2,
+  },
+  applicantMeta: {
+    marginTop: 8,
+    gap: 4,
+  },
+  applicantMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  applicantDetail: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray600,
+    lineHeight: 20,
+  },
+  applicantCardActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.gray200,
+  },
+  messageBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  messageBtnText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.primary,
+  },
+  viewProfileBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary,
+  },
+  viewProfileBtnText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.white,
+  },
+
+  // Premium Profile Modal
+  profileHeroWrap: {
+    width: '100%',
+  },
+  profileCoverSection: {
+    width: '100%',
+    height: COVER_HEIGHT,
+    position: 'relative',
+    overflow: 'visible',
+    backgroundColor: Colors.gray100,
+  },
+  profileCoverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  profileBackButton: {
+    position: 'absolute',
+    left: Spacing.lg,
+    zIndex: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  profileAvatarWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -AVATAR_OVERLAP,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  profileAvatarShadow: {
+    borderRadius: AVATAR_SIZE / 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  profileModalAvatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: Colors.gray200,
+    borderWidth: 4,
+    borderColor: Colors.white,
+  },
+  profileAvatarFallback: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: Colors.primary + '14',
+    borderWidth: 4,
+    borderColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileAvatarFallbackText: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.primary,
+  },
+  profileCoverFallback: {
+    width: '100%',
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  profileCoverFallbackText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.medium as any,
+    color: Colors.gray500,
+  },
+  statusDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: Colors.success,
+    borderWidth: 2.5,
+    borderColor: Colors.white,
+  },
+  profileInfoSection: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: AVATAR_OVERLAP + 18,
+    paddingBottom: Spacing.lg,
+    alignItems: 'center',
+  },
+  profileName: {
+    fontSize: FontSizes.xl,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+    textAlign: 'center',
+  },
+  profileProfession: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.medium as any,
+    color: Colors.primary,
+    marginTop: 4,
+    textAlign: 'center',
+    textTransform: 'capitalize',
+  },
+  profileLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  profileLocationText: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray500,
+  },
+  profileBadgeRow: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  profileBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary + '0C',
+    borderWidth: 1,
+    borderColor: Colors.primary + '18',
+  },
+  profileBadgeText: {
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray700,
+  },
+  quickInfoList: {
+    width: '100%',
+    gap: 8,
+  },
+  quickInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.gray50,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.gray100,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  quickInfoLabel: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray500,
+    marginBottom: 2,
+  },
+  quickInfoValue: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray900,
+  },
+  detailGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  detailItem: {
+    width: '48%',
+    backgroundColor: Colors.gray50,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  detailLabel: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray500,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  detailValue: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray900,
+  },
+  profileActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: Spacing.lg,
+    width: '100%',
+  },
+  profileActionOutline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  profileActionOutlineText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.primary,
+  },
+  profileActionPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary,
+  },
+  profileActionPrimaryText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.white,
+  },
+  profileActionHired: {
+    backgroundColor: Colors.gray500,
+    opacity: 0.85,
+  },
+  profileActionSaved: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  profileStickyFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  profileContentCard: {
+    marginTop: Spacing.sm,
+    marginHorizontal: 0,
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.gray100,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+    overflow: 'visible',
+  },
+  profileSection: {
+    width: '100%',
+    marginTop: Spacing.md,
+    backgroundColor: Colors.gray50,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.gray100,
+    padding: Spacing.md,
+  },
+  profileSectionTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray800,
+    marginBottom: 10,
+  },
+  bioText: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray600,
+    lineHeight: 22,
+  },
+  skillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  skillChip: {
+    backgroundColor: Colors.primary + '0E',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.primary + '20',
+  },
+  skillChipText: {
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.primary,
+  },
+  activityGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  activityCard: {
+    flex: 1,
+    backgroundColor: Colors.gray50,
+    borderRadius: 16,
+    padding: Spacing.md,
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+  },
+  activityValue: {
+    fontSize: FontSizes.xl,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+  },
+  activityLabel: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray500,
+    fontWeight: FontWeights.medium as any,
+  },
+  rehireOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  rehireModal: {
+    width: '90%',
+    maxWidth: 400,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 24,
+  },
+  rehireTitle: {
+    fontSize: FontSizes.xl,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+    marginBottom: 12,
+  },
+  rehireBody: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray600,
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  rehireActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  rehireCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.gray300,
+    alignItems: 'center',
+  },
+  rehireCancelText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray600,
+  },
+  rehireConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+  },
+  rehireConfirmText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.white,
+  },
+  skeletonAvatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: Colors.gray200,
+    borderWidth: 4,
+    borderColor: Colors.white,
+  },
+  skeletonBlock: {
+    backgroundColor: Colors.gray200,
+    borderRadius: BorderRadius.sm,
   },
 });

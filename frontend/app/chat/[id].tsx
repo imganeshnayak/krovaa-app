@@ -15,7 +15,7 @@ import {
   Animated,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, MoreVertical, Send, Search, Ban, Image as ImageIcon, Camera, FileText, Reply, Forward, Copy, Trash2, Star, X, Archive } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Send, Search, Ban, Image as ImageIcon, Camera, FileText, Reply, Forward, Copy, Trash2, Star, X, Archive, Share2 } from 'lucide-react-native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { BlurView } from 'expo-blur';
 import { io, Socket } from 'socket.io-client';
@@ -26,6 +26,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes, getThemeMode } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { API_BASE_URL } from '@/lib/apiBaseUrl';
+import ShareProfileAction from '@/components/share/ShareProfileAction';
 import {
   getConversationMessages,
   getConversations,
@@ -178,6 +179,17 @@ export default function ChatDetailScreen() {
     if (!conversation) return null;
     return conversation.participants.find((item) => item.id !== currentUserId) ?? conversation.participants[0] ?? null;
   }, [conversation, currentUserId]);
+
+  const participantShareUrl = useMemo(() => {
+    if (!participant) return '';
+    const identifier = participant.userCode || participant.username || participant.id;
+    return identifier ? `https://krovaa.com/s/${identifier}` : '';
+  }, [participant]);
+
+  const participantShareTitle = useMemo(() => {
+    if (!participant) return 'Professional profile';
+    return participant.fullName || participant.username || 'Professional profile';
+  }, [participant]);
 
   const isParticipantBlocked = useMemo(() => {
     if (!participant?.id) return false;
@@ -993,6 +1005,23 @@ export default function ChatDetailScreen() {
           </View>
         </TouchableOpacity>
         <View style={styles.headerActions}>
+          <ShareProfileAction
+            profileUrl={participantShareUrl}
+            userName={participantShareTitle}
+            userTitle={participant?.username ? `@${participant.username}` : participant?.email || 'View profile'}
+            launchMode="sheet-first"
+          >
+            {({ openSheet, isSharing }) => (
+              <TouchableOpacity
+                style={[styles.iconButton, isSharing && { opacity: 0.5 }]}
+                onPress={openSheet}
+                disabled={isSharing || !participantShareUrl}
+                activeOpacity={0.7}
+              >
+                <Share2 size={18} color={Colors.gray900} />
+              </TouchableOpacity>
+            )}
+          </ShareProfileAction>
           <TouchableOpacity style={styles.iconButton} onPress={toggleMenu}>
             <MoreVertical size={18} color={Colors.gray900} />
           </TouchableOpacity>
