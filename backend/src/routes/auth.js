@@ -1,11 +1,14 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import User, { hashPassword, comparePassword } from '../models/User.js';
 import { prisma } from '../config/db.js';
 
 const router = express.Router();
 const pendingRegistrations = new Map();
+const pendingPasswordResets = new Map();
+const pendingPasswordResetTokens = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000;
 const USER_CODE_LENGTH = 6;
 const USER_CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -115,6 +118,10 @@ function buildOtpEmail(otp, minutes) {
   return `Your Krovaa verification code is ${otp}. It expires in ${minutes} minutes.`;
 }
 
+function buildPasswordResetEmail(otp, minutes) {
+  return `Your Krovaa password reset code is ${otp}. It expires in ${minutes} minutes.`;
+}
+
 function getPendingRegistration(email) {
   const key = email.toLowerCase();
   const pending = pendingRegistrations.get(key);
@@ -125,6 +132,37 @@ function getPendingRegistration(email) {
 
   if (pending.expiresAt < Date.now()) {
     pendingRegistrations.delete(key);
+    return null;
+  }
+
+  return pending;
+}
+
+function getPendingPasswordReset(email) {
+  const key = email.toLowerCase();
+  const pending = pendingPasswordResets.get(key);
+
+  if (!pending) {
+    return null;
+  }
+
+  if (pending.expiresAt < Date.now()) {
+    pendingPasswordResets.delete(key);
+    return null;
+  }
+
+  return pending;
+}
+
+function getPendingPasswordResetToken(token) {
+  const pending = pendingPasswordResetTokens.get(token);
+
+  if (!pending) {
+    return null;
+  }
+
+  if (pending.expiresAt < Date.now()) {
+    pendingPasswordResetTokens.delete(token);
     return null;
   }
 
@@ -316,6 +354,122 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Something went wrong.' });
+  }
+});
+
+router.post('/password-reset/request', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findUnique({ where: { email: normalizedEmail } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'No account found for this email.' });
+    }
+
+    const otp = generateOtp();
+    const expiresAt = Date.now() + OTP_TTL_MS;
+    pendingPasswordResets.set(normalizedEmail, {
+      email: normalizedEmail,
+      otp,
+      expiresAt,
+    });
+
+    const transporter = createTransporter();
+    const { fromEmail, fromName } = getSmtpSettings();
+
+    await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: normalizedEmail,
+      subject: 'Your Krovaa password reset code',
+      text: buildPasswordResetEmail(otp, OTP_TTL_MS / 60000),
+      html: `<p>Your Krovaa password reset code is <strong>${otp}</strong>.</p><p>This code expires in ${OTP_TTL_MS / 60000} minutes.</p>`,
+    });
+
+    return res.json({ message: 'Password reset OTP sent successfully.' });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to send password reset OTP.' });
+  }
+});
+
+router.post('/password-reset/verify', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP are required.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const pending = getPendingPasswordReset(normalizedEmail);
+
+    if (!pending) {
+      return res.status(400).json({ error: 'OTP has expired or was not requested.' });
+    }
+
+    if (pending.otp !== otp.trim()) {
+      return res.status(400).json({ error: 'Invalid OTP.' });
+    }
+
+    pendingPasswordResets.delete(normalizedEmail);
+
+    const resetToken = crypto.randomBytes(24).toString('hex');
+    pendingPasswordResetTokens.set(resetToken, {
+      email: normalizedEmail,
+      expiresAt: Date.now() + OTP_TTL_MS,
+    });
+
+    return res.json({ message: 'OTP verified successfully.', resetToken });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to verify OTP.' });
+  }
+});
+
+router.post('/password-reset/change', async (req, res) => {
+  try {
+    const { resetToken, password, retypePassword } = req.body;
+
+    if (!resetToken || !password || !retypePassword) {
+      return res.status(400).json({ error: 'Reset token, password, and retype password are required.' });
+    }
+
+    if (password !== retypePassword) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+
+    const token = resetToken.trim();
+    const pendingToken = getPendingPasswordResetToken(token);
+
+    if (!pendingToken) {
+      return res.status(400).json({ error: 'Password reset session has expired. Please request a new OTP.' });
+    }
+
+    const user = await User.findUnique({ where: { email: pendingToken.email } });
+    if (!user) {
+      pendingPasswordResetTokens.delete(token);
+      return res.status(404).json({ error: 'No account found for this email.' });
+    }
+
+    const hashedPassword = await hashPassword(password);
+    await User.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
+
+    pendingPasswordResetTokens.delete(token);
+
+    return res.json({ message: 'Password reset successful.' });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to reset password.' });
   }
 });
 

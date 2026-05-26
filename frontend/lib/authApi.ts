@@ -15,7 +15,14 @@ type OtpSendResponse = {
   message: string;
 };
 
-type OtpVerifyResponse = AuthResponse;
+type PasswordResetVerifyResponse = {
+  message: string;
+  resetToken: string;
+};
+
+type PasswordResetChangeResponse = {
+  message: string;
+};
 
 async function request<TResponse>(path: string, body: Record<string, string>) {
   const url = `${API_BASE_URL}${path}`;
@@ -55,4 +62,23 @@ export async function sendRegistrationOtp(email: string, username: string, passw
 
 export async function verifyRegistrationOtp(email: string, otp: string) {
   return request<OtpVerifyResponse>('/api/auth/register/verify-otp', { email, otp });
+}
+
+export async function requestPasswordReset(email: string) {
+  return request<OtpSendResponse>('/api/auth/password-reset/request', { email });
+}
+
+export async function verifyPasswordResetOtp(email: string, otp: string) {
+  return request<PasswordResetVerifyResponse>('/api/auth/password-reset/verify', {
+    email,
+    otp,
+  });
+}
+
+export async function changePasswordAfterReset(resetToken: string, password: string, retypePassword: string) {
+  return request<PasswordResetChangeResponse>('/api/auth/password-reset/change', {
+    resetToken,
+    password,
+    retypePassword,
+  });
 }

@@ -210,7 +210,7 @@ export default function ChatListScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F6F9FD' },
+  container: { flex: 1, backgroundColor: Colors.gray50 },
   rowWrap: { marginHorizontal: 10, marginVertical: 6 },
   row: {
     flexDirection: 'row',
@@ -222,10 +222,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',
   },
-  unreadCard: { backgroundColor: 'rgba(14, 165, 233, 0.03)' },
+  unreadCard: { backgroundColor: Colors.gray100 },
   avatarWrap: { position: 'relative', marginRight: 14 },
   avatar: { width: 58, height: 58, borderRadius: 29 },
-  onlineDot: { position: 'absolute', right: 1, bottom: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#0ea5e9', borderWidth: 2, borderColor: Colors.white },
+  onlineDot: { position: 'absolute', right: 1, bottom: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.primary, borderWidth: 2, borderColor: Colors.white },
   meta: { flex: 1 },
   name: { fontSize: FontSizes.md, fontWeight: FontWeights.semiBold as any, color: Colors.gray900 },
   preview: { marginTop: 4, color: Colors.gray600 },
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   rightMeta: { alignItems: 'flex-end', justifyContent: 'center' },
   time: { color: Colors.gray500, fontSize: FontSizes.xs },
   unreadBadgeContainer: { marginTop: 8, alignItems: 'flex-end' },
-  unreadBadge: { minWidth: 24, height: 24, paddingHorizontal: 6, borderRadius: 12, backgroundColor: '#0ea5e9', alignItems: 'center', justifyContent: 'center' },
+  unreadBadge: { minWidth: 24, height: 24, paddingHorizontal: 6, borderRadius: 12, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   unreadText: { color: Colors.white, fontWeight: '800', fontSize: 12 },
-  archiveChip: { marginTop: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.04)', alignItems: 'center', justifyContent: 'center' },
+  archiveChip: { marginTop: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.gray100, alignItems: 'center', justifyContent: 'center' },
 });
