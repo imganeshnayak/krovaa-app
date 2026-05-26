@@ -698,11 +698,7 @@ router.put('/', verifyToken, async (req, res) => {
 
     return res.json({
       message: 'Profile updated successfully.',
-<<<<<<< HEAD
       user: mapUserResponse(refreshed),
-=======
-      user: await buildPublicProfileResponse(user),
->>>>>>> 7eb98a14e0a7f9d97b2ee2e2f76cbd2a353dfdb9
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to update profile.' });
