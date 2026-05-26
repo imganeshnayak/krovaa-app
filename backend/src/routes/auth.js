@@ -94,6 +94,7 @@ function getSmtpSettings() {
 
 function createTransporter() {
   const { host, port, user, pass } = getSmtpSettings();
+  const allowSelfSigned = String(process.env.SMTP_ALLOW_SELF_SIGNED || '').toLowerCase() === 'true';
 
   return nodemailer.createTransport({
     host,
@@ -102,6 +103,10 @@ function createTransporter() {
     auth: {
       user,
       pass,
+    },
+    tls: {
+      // Useful in local/dev networks where SSL inspection injects a custom certificate.
+      rejectUnauthorized: !allowSelfSigned,
     },
   });
 }
