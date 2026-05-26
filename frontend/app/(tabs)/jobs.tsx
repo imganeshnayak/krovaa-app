@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Modal, FlatList, Image, ActivityIndicator, Alert,
-  Animated, Pressable,
+  Animated, Pressable, Dimensions,
 } from 'react-native';
 import {
   Search, MapPin, IndianRupee, Briefcase, X, Plus,
@@ -10,15 +10,17 @@ import {
   GraduationCap, Wifi, Home, Globe, User,
   Pencil, Trash2, ArrowLeft, Send, Eye, MessageCircle,
   CheckCircle, XCircle, Clock as Hourglass,
+  Heart, Award, Star,
 } from 'lucide-react-native';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import {
   getJobs, postJob, applyJob, getMyJobs, deleteJob, updateJob,
-  getAppliedJobs, withdrawApplication, getJobApplicants,
+  getAppliedJobs, withdrawApplication, getJobApplicants, getUserProfile,
   type Job, type AppliedJob, type JobApplicant,
 } from '@/lib/jobsApi';
+import { createConversationWithUserId } from '@/lib/chatApi';
 
 const JOB_CATEGORIES = ['All', 'Design', 'Development', 'Marketing', 'Writing', 'Video'];
 const JOB_MODES = [
@@ -34,6 +36,35 @@ function getModeIcon(mode: string) {
   const found = JOB_MODES.find((m) => m.value === mode);
   return found?.icon || Briefcase;
 }
+
+const AnimatedPressable = ({ style, onPress, disabled, children }: any) => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const animateIn = () => {
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, friction: 8 }).start();
+  };
+  const animateOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 8 }).start();
+  };
+  return (
+    <Animated.View style={[style, { transform: [{ scale }] }]}>
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={disabled}
+        activeOpacity={0.75}
+        onPressIn={animateIn}
+        onPressOut={animateOut}
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+      >
+        {children}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const COVER_HEIGHT = SCREEN_WIDTH / 3;
+const AVATAR_SIZE = 96;
+const AVATAR_OVERLAP = AVATAR_SIZE / 2;
 
 export default function JobsScreen() {
   const router = useRouter();
@@ -59,6 +90,15 @@ export default function JobsScreen() {
   const [myJobsLoading, setMyJobsLoading] = useState(false);
   const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([]);
   const [appliedJobsLoading, setAppliedJobsLoading] = useState(false);
+
+  // Messaging state
+  const [messagingApplicantId, setMessagingApplicantId] = useState<string | null>(null);
+
+  // Premium profile modal
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileUser, setProfileUser] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
 
   // Applicants dashboard
   const [showApplicantsDashboard, setShowApplicantsDashboard] = useState(false);
@@ -302,6 +342,83 @@ export default function JobsScreen() {
     router.push({ pathname: '/jobs/applicants/[id]' as any, params: { id: jobId } });
   };
 
+  // Applicants Dashboard
+  const openApplicantsDashboard = async (job: Job) => {
+    if (!session?.access_token) return;
+    setDashboardJob(job);
+    setShowApplicantsDashboard(true);
+    setDashboardLoading(true);
+    const { data } = await getJobApplicants(session.access_token, job.id);
+    if (data) setDashboardApplicants(data);
+    setDashboardLoading(false);
+  };
+
+  const handleWithdraw = (job: AppliedJob) => {
+    Alert.alert('Withdraw Application', `Withdraw your application for "${job.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Withdraw', style: 'destructive',
+        onPress: async () => {
+          if (!session?.access_token) return;
+          await withdrawApplication(session.access_token, job.id);
+          setAppliedJobs((prev) => prev.filter((j) => j.id !== job.id));
+        },
+      },
+    ]);
+  };
+
+  const handleMessageApplicant = async (applicant: JobApplicant) => {
+    if (!session?.access_token || !applicant.id) return;
+    setMessagingApplicantId(applicant.id);
+    try {
+      const { data: convData } = await createConversationWithUserId(
+        session.access_token,
+        applicant.id
+      );
+      if (convData?.conversation) {
+        router.push(`/chat/${convData.conversation.id}`);
+      }
+    } catch (err) {
+      console.error('Error creating conversation:', err);
+    } finally {
+      setMessagingApplicantId(null);
+    }
+  };
+
+  const openProfileModal = async (applicant: JobApplicant) => {
+    if (!session?.access_token) return;
+    setShowProfileModal(true);
+    setProfileLoading(true);
+    setProfileSaved(false);
+    const { data } = await getUserProfile(session.access_token, applicant.id);
+    if (data) setProfileUser(data);
+    setProfileLoading(false);
+  };
+
+  const handleMessageFromProfile = async (userId: string) => {
+    if (!session?.access_token || !userId) return;
+    setMessagingApplicantId(userId);
+    try {
+      const { data: convData } = await createConversationWithUserId(session.access_token, userId);
+      if (convData?.conversation) {
+        setShowProfileModal(false);
+        router.push(`/chat/${convData.conversation.id}`);
+      }
+    } catch (err) {
+      console.error('Error:', err);
+    } finally {
+      setMessagingApplicantId(null);
+    }
+  };
+
+  const handleHireInvite = () => {
+    Alert.alert('Coming Soon', 'Hire/Invite functionality will be available shortly.');
+  };
+
+  const handleSaveProfile = () => {
+    setProfileSaved((prev) => !prev);
+  };
+
   // Render job card
   const renderJobCard = ({ item }: { item: Job }) => {
     const isJobOwner = session?.user?.id === item.posterId;
@@ -517,6 +634,259 @@ export default function JobsScreen() {
         </TouchableOpacity>
       </Animated.View>
 
+      {/* Applicants Dashboard Modal */}
+      <Modal visible={showApplicantsDashboard} transparent animationType="slide" onRequestClose={() => setShowApplicantsDashboard(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { paddingHorizontal: 0, paddingTop: 0 }]}>
+            <View style={styles.dashHeader}>
+              <TouchableOpacity onPress={() => setShowApplicantsDashboard(false)} style={styles.dashBackBtn}>
+                <ArrowLeft size={22} color={Colors.gray800} />
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dashTitle} numberOfLines={1}>{dashboardJob?.title || 'Applicants'}</Text>
+              </View>
+              <View style={styles.dashCountBadge}>
+                <Text style={styles.dashCountText}>{dashboardApplicants.length}</Text>
+              </View>
+            </View>
+
+            {dashboardLoading ? (
+              <View style={[styles.centerState, { paddingVertical: 80 }]}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+              </View>
+            ) : dashboardApplicants.length === 0 ? (
+              <View style={[styles.emptyState, { paddingTop: 60 }]}>
+                <User size={52} color={Colors.gray200} />
+                <Text style={styles.emptyTitle}>No applicants yet</Text>
+                <Text style={styles.emptyDesc}>When people apply, they will appear here.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={dashboardApplicants}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
+                renderItem={({ item }) => (
+                  <View style={styles.applicantCard}>
+                    <View style={styles.applicantCardTop}>
+                      <Image source={{ uri: item.avatar }} style={styles.applicantAvatar} />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={styles.applicantName}>{item.name}</Text>
+                        {item.profession ? (
+                          <Text style={styles.applicantBio} numberOfLines={1}>{item.profession}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <View style={styles.applicantMeta}>
+                      {item.bio ? (
+                        <Text style={styles.applicantDetail} numberOfLines={2}>{item.bio}</Text>
+                      ) : null}
+                      <View style={styles.applicantMetaRow}>
+                        <MapPin size={12} color={Colors.gray500} />
+                        <Text style={styles.applicantDetail}>Applied {item.appliedAt ? new Date(item.appliedAt).toLocaleDateString() : ''}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.applicantCardActions}>
+                      <AnimatedPressable
+                        style={styles.messageBtn}
+                        onPress={() => handleMessageApplicant(item)}
+                        disabled={messagingApplicantId === item.id}
+                      >
+                        {messagingApplicantId === item.id ? (
+                          <ActivityIndicator size="small" color={Colors.primary} />
+                        ) : (
+                          <>
+                            <MessageCircle size={15} color={Colors.primary} />
+                            <Text style={styles.messageBtnText}>Message</Text>
+                          </>
+                        )}
+                      </AnimatedPressable>
+                      <AnimatedPressable
+                        style={styles.viewProfileBtn}
+                        onPress={() => openProfileModal(item)}
+                      >
+                        <Eye size={15} color={Colors.white} />
+                        <Text style={styles.viewProfileBtnText}>View Profile</Text>
+                      </AnimatedPressable>
+                    </View>
+                  </View>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Premium Profile Modal */}
+      <Modal visible={showProfileModal} transparent animationType="slide" onRequestClose={() => setShowProfileModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { paddingHorizontal: 0, paddingTop: 0 }]}>
+            {/* Header */}
+            <View style={styles.profileHeader}>
+              <TouchableOpacity onPress={() => setShowProfileModal(false)} style={styles.dashBackBtn}>
+                <ArrowLeft size={22} color={Colors.gray800} />
+              </TouchableOpacity>
+            </View>
+
+            {profileLoading ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ width: '100%', aspectRatio: 3, backgroundColor: Colors.gray200 }} />
+                <View style={{ alignItems: 'center', marginTop: -AVATAR_OVERLAP }}>
+                  <View style={styles.skeletonAvatar} />
+                </View>
+                <View style={{ padding: Spacing.lg, paddingTop: AVATAR_OVERLAP + 12, gap: 14 }}>
+                  <View style={[styles.skeletonBlock, { width: '50%', height: 24, alignSelf: 'center' }]} />
+                  <View style={[styles.skeletonBlock, { width: '35%', height: 16, alignSelf: 'center' }]} />
+                  <View style={[styles.skeletonBlock, { width: '45%', height: 14, alignSelf: 'center' }]} />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={[styles.skeletonBlock, { flex: 1, height: 46 }]} />
+                    <View style={[styles.skeletonBlock, { flex: 1, height: 46 }]} />
+                    <View style={[styles.skeletonBlock, { flex: 1, height: 46 }]} />
+                  </View>
+                  <View style={{ gap: 6 }}>
+                    <View style={[styles.skeletonBlock, { height: 12 }]} />
+                    <View style={[styles.skeletonBlock, { width: '90%', height: 12 }]} />
+                    <View style={[styles.skeletonBlock, { width: '70%', height: 12 }]} />
+                  </View>
+                  <View>
+                    <View style={[styles.skeletonBlock, { width: 80, height: 14, marginBottom: 10 }]} />
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {[1, 2, 3, 4].map((i) => (
+                        <View key={i} style={[styles.skeletonBlock, { width: 70, height: 28 }]} />
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              </ScrollView>
+            ) : profileUser ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Cover Image */}
+                <View style={{ height: COVER_HEIGHT + AVATAR_OVERLAP }}>
+                  <Image
+                    source={{ uri: profileUser.coverPhotoUrl || 'https://images.pexels.com/photos/313782/pexels-photo-313782.jpeg?auto=compress&cs=tinysrgb&w=800' }}
+                    style={{ width: '100%', height: COVER_HEIGHT }}
+                  />
+                  {!profileUser.coverPhotoUrl && (
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.primary + '15' }]} />
+                  )}
+                  {/* Overlapping Avatar */}
+                  <View style={{ position: 'absolute', bottom: -AVATAR_OVERLAP, left: 0, right: 0, alignItems: 'center' }}>
+                    <View style={{ position: 'relative' }}>
+                      <Image
+                        source={{ uri: profileUser.avatar || 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200' }}
+                        style={styles.profileModalAvatar}
+                      />
+                      <View style={styles.statusDot} />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Info Section */}
+                <View style={styles.profileInfoSection}>
+                  <Text style={styles.profileName} numberOfLines={1}>{profileUser.fullName || 'Unknown'}</Text>
+                  {profileUser.profession ? (
+                    <Text style={styles.profileProfession} numberOfLines={1}>
+                      {profileUser.profession.charAt(0).toUpperCase() + profileUser.profession.slice(1)}
+                    </Text>
+                  ) : null}
+                  <View style={styles.profileLocationRow}>
+                    <MapPin size={14} color={Colors.gray500} />
+                    <Text style={styles.profileLocationText} numberOfLines={1}>
+                      {profileUser.location || 'Location not set'}
+                    </Text>
+                  </View>
+
+                  {/* Action Buttons */}
+                  <View style={styles.profileActions}>
+                    <AnimatedPressable
+                      style={styles.profileActionOutline}
+                      onPress={() => handleMessageFromProfile(profileUser.id)}
+                      disabled={messagingApplicantId === profileUser.id}
+                    >
+                      {messagingApplicantId === profileUser.id ? (
+                        <ActivityIndicator size="small" color={Colors.primary} />
+                      ) : (
+                        <>
+                          <MessageCircle size={16} color={Colors.primary} />
+                          <Text style={styles.profileActionOutlineText}>Message</Text>
+                        </>
+                      )}
+                    </AnimatedPressable>
+                    <AnimatedPressable
+                      style={styles.profileActionPrimary}
+                      onPress={handleHireInvite}
+                    >
+                      <Award size={16} color={Colors.white} />
+                      <Text style={styles.profileActionPrimaryText}>Hire</Text>
+                    </AnimatedPressable>
+                    <AnimatedPressable
+                      style={[styles.profileActionOutline, profileSaved && styles.profileActionSaved]}
+                      onPress={handleSaveProfile}
+                    >
+                      <Heart
+                        size={16}
+                        color={profileSaved ? Colors.white : Colors.gray600}
+                        fill={profileSaved ? Colors.white : 'transparent'}
+                      />
+                      <Text style={[styles.profileActionOutlineText, profileSaved && { color: Colors.white }]}>
+                        {profileSaved ? 'Saved' : 'Save'}
+                      </Text>
+                    </AnimatedPressable>
+                  </View>
+
+                  {/* About */}
+                  {profileUser.bio ? (
+                    <View style={styles.profileSection}>
+                      <Text style={styles.profileSectionTitle}>About</Text>
+                      <Text style={styles.bioText}>{profileUser.bio}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Skills */}
+                  {profileUser.skills?.length > 0 ? (
+                    <View style={styles.profileSection}>
+                      <Text style={styles.profileSectionTitle}>Skills</Text>
+                      <View style={styles.skillsWrap}>
+                        {profileUser.skills.map((skill: string, index: number) => (
+                          <View key={index} style={styles.skillChip}>
+                            <Text style={styles.skillChipText}>{skill}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {/* Activity Metrics */}
+                  {profileUser.stats ? (
+                    <View style={styles.profileSection}>
+                      <Text style={styles.profileSectionTitle}>Activity</Text>
+                      <View style={styles.activityGrid}>
+                        <View style={styles.activityCard}>
+                          <Briefcase size={20} color={Colors.primary} />
+                          <Text style={styles.activityValue}>{profileUser.stats.jobsDone || 0}</Text>
+                          <Text style={styles.activityLabel}>Projects</Text>
+                        </View>
+                        <View style={styles.activityCard}>
+                          <Star size={20} color={Colors.warning} />
+                          <Text style={styles.activityValue}>{profileUser.stats.reviews || 0}</Text>
+                          <Text style={styles.activityLabel}>Reviews</Text>
+                        </View>
+                        <View style={styles.activityCard}>
+                          <IndianRupee size={20} color={Colors.secondary} />
+                          <Text style={styles.activityValue}>{profileUser.stats.earned || 0}</Text>
+                          <Text style={styles.activityLabel}>Earned</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {Spacing.xxl && <View style={{ height: Spacing.xxl }} />}
+                </View>
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
       {/* Post / Edit Job Modal */}
       <Modal visible={showPostModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPostModal(false)}>
         <View style={styles.modalContainer}>
@@ -630,60 +1000,165 @@ export default function JobsScreen() {
               <X size={24} color={Colors.gray700} />
             </TouchableOpacity>
           </View>
-          {myJobsLoading ? (
-            <View style={styles.centerState}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-            </View>
-          ) : myJobs.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Briefcase size={52} color={Colors.gray200} />
-              <Text style={styles.emptyTitle}>No listings yet</Text>
-              <Text style={styles.emptyDesc}>Jobs you post will appear here.</Text>
-            </View>
+
+          {/* Segmented tabs */}
+          <View style={styles.segmentedWrap}>
+            <TouchableOpacity
+              style={[styles.segmentedTab, myListingsTab === 'applicants' && styles.segmentedTabActive]}
+              onPress={() => setMyListingsTab('applicants')}
+              activeOpacity={0.7}
+            >
+              <User size={14} color={myListingsTab === 'applicants' ? Colors.white : Colors.gray600} />
+              <Text style={[styles.segmentedTabText, myListingsTab === 'applicants' && styles.segmentedTabTextActive]}>
+                Applicants
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.segmentedTab, myListingsTab === 'applied' && styles.segmentedTabActive]}
+              onPress={() => setMyListingsTab('applied')}
+              activeOpacity={0.7}
+            >
+              <Send size={14} color={myListingsTab === 'applied' ? Colors.white : Colors.gray600} />
+              <Text style={[styles.segmentedTabText, myListingsTab === 'applied' && styles.segmentedTabTextActive]}>
+                Applied
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {myListingsTab === 'applicants' ? (
+            myJobsLoading ? (
+              <View style={styles.centerState}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+              </View>
+            ) : myJobs.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Briefcase size={52} color={Colors.gray200} />
+                <Text style={styles.emptyTitle}>No listings yet</Text>
+                <Text style={styles.emptyDesc}>Jobs you post will appear here.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={myJobs}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.myJobCard}
+                    activeOpacity={0.85}
+                    onPress={() => openApplicantsDashboard(item)}
+                  >
+                    <View style={styles.myJobCardTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.jobTitle} numberOfLines={1}>{item.title}</Text>
+                        <Text style={styles.jobCompany}>{item.company}</Text>
+                      </View>
+                      <View style={styles.myJobActions}>
+                        <TouchableOpacity
+                          style={styles.myJobActionBtn}
+                          onPress={() => handleEditMyJob(item)}
+                        >
+                          <Pencil size={16} color={Colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.myJobActionBtn}
+                          onPress={() => handleDeleteMyJob(item)}
+                        >
+                          <Trash2 size={16} color={Colors.error} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <View style={styles.jobMeta}>
+                      <View style={styles.jobMetaItem}>
+                        <IndianRupee size={13} color={Colors.secondary} />
+                        <Text style={styles.jobMetaText}>{item.budget}</Text>
+                      </View>
+                      <View style={styles.jobMetaItem}>
+                        <MapPin size={13} color={Colors.gray500} />
+                        <Text style={styles.jobMetaText}>{item.location}</Text>
+                      </View>
+                      <View style={styles.jobMetaItem}>
+                        <User size={13} color={Colors.gray500} />
+                        <Text style={styles.jobMetaText}>{item.applicantCount} applicants</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            )
           ) : (
-            <FlatList
-              data={myJobs}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
-              renderItem={({ item }) => (
-                <View style={styles.myJobCard}>
-                  <View style={styles.myJobCardTop}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.jobTitle} numberOfLines={1}>{item.title}</Text>
-                      <Text style={styles.jobCompany}>{item.company}</Text>
+            appliedJobsLoading ? (
+              <View style={styles.centerState}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+              </View>
+            ) : appliedJobs.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Send size={52} color={Colors.gray200} />
+                <Text style={styles.emptyTitle}>No applications yet</Text>
+                <Text style={styles.emptyDesc}>You haven't applied to any jobs yet.</Text>
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={() => { setShowMyListings(false); }}
+                >
+                  <Text style={styles.retryBtnText}>Browse Jobs</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <FlatList
+                data={appliedJobs}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
+                renderItem={({ item }) => {
+                  const statusColors: Record<string, { bg: string; text: string }> = {
+                    pending: { bg: '#FEF3C7', text: '#92400E' },
+                    viewed: { bg: '#DBEAFE', text: '#1E40AF' },
+                    shortlisted: { bg: '#DBEAFE', text: '#1E40AF' },
+                    accepted: { bg: '#DCFCE7', text: '#166534' },
+                    rejected: { bg: '#FEE2E2', text: '#991B1B' },
+                  };
+                  const colors = statusColors[item.applicationStatus] || statusColors.pending;
+                  const statusLabel = item.applicationStatus.charAt(0).toUpperCase() + item.applicationStatus.slice(1);
+                  const StatusIcon = item.applicationStatus === 'accepted' ? CheckCircle :
+                    item.applicationStatus === 'rejected' ? XCircle : Hourglass;
+
+                  return (
+                    <View style={styles.appliedJobCard}>
+                      <View style={styles.appliedJobCardTop}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.jobTitle} numberOfLines={1}>{item.title}</Text>
+                          <Text style={styles.jobCompany}>{item.company}</Text>
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
+                          <StatusIcon size={12} color={colors.text} />
+                          <Text style={[styles.statusBadgeText, { color: colors.text }]}>{statusLabel}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.jobMeta}>
+                        <View style={styles.jobMetaItem}>
+                          <IndianRupee size={13} color={Colors.secondary} />
+                          <Text style={styles.jobMetaText}>{item.budget}</Text>
+                        </View>
+                        <View style={styles.jobMetaItem}>
+                          <MapPin size={13} color={Colors.gray500} />
+                          <Text style={styles.jobMetaText}>{item.location}</Text>
+                        </View>
+                        <View style={styles.jobMetaItem}>
+                          <Clock size={13} color={Colors.gray500} />
+                          <Text style={styles.jobMetaText}>{item.posted}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.appliedJobFooter}>
+                        <TouchableOpacity onPress={() => handleWithdraw(item)} activeOpacity={0.7}>
+                          <Text style={styles.withdrawText}>Withdraw Application</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.viewJobBtn} activeOpacity={0.7}>
+                          <Text style={styles.viewJobBtnText}>View Job</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <View style={styles.myJobActions}>
-                      <TouchableOpacity
-                        style={styles.myJobActionBtn}
-                        onPress={() => handleEditMyJob(item)}
-                      >
-                        <Pencil size={16} color={Colors.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.myJobActionBtn}
-                        onPress={() => handleDeleteMyJob(item)}
-                      >
-                        <Trash2 size={16} color={Colors.error} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  <View style={styles.jobMeta}>
-                    <View style={styles.jobMetaItem}>
-                      <IndianRupee size={13} color={Colors.secondary} />
-                      <Text style={styles.jobMetaText}>{item.budget}</Text>
-                    </View>
-                    <View style={styles.jobMetaItem}>
-                      <MapPin size={13} color={Colors.gray500} />
-                      <Text style={styles.jobMetaText}>{item.location}</Text>
-                    </View>
-                    <View style={styles.jobMetaItem}>
-                      <User size={13} color={Colors.gray500} />
-                      <Text style={styles.jobMetaText}>{item.applicantCount} applicants</Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-            />
+                  );
+                }}
+              />
+            )
           )}
         </View>
       </Modal>
@@ -1046,6 +1521,10 @@ const styles = StyleSheet.create({
   },
 
   // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
   modalContainer: {
     flex: 1,
     backgroundColor: Colors.white,
@@ -1139,5 +1618,388 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // Segmented tabs
+  segmentedWrap: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.gray100,
+    borderRadius: BorderRadius.md,
+    padding: 3,
+  },
+  segmentedTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.sm,
+  },
+  segmentedTabActive: {
+    backgroundColor: Colors.primary,
+    elevation: 2,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  segmentedTabText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray600,
+  },
+  segmentedTabTextActive: {
+    color: Colors.white,
+  },
+
+  // Applied jobs
+  appliedJobCard: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  appliedJobCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusBadgeText: {
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  appliedJobFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.gray200,
+  },
+  withdrawText: {
+    fontSize: FontSizes.sm,
+    color: Colors.error,
+    fontWeight: FontWeights.medium as any,
+  },
+  viewJobBtn: {
+    backgroundColor: Colors.gray100,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+  },
+  viewJobBtnText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray700,
+  },
+
+  // Applicants Dashboard
+  dashHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: 60,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.gray200,
+  },
+  dashBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dashTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+  },
+  dashCountBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.full,
+    minWidth: 28,
+    height: 28,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dashCountText: {
+    color: Colors.white,
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.bold as any,
+  },
+  applicantCard: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  applicantCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  applicantAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.gray200,
+  },
+  applicantName: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray900,
+  },
+  applicantBio: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray500,
+    marginTop: 2,
+  },
+  applicantMeta: {
+    marginTop: 8,
+    gap: 4,
+  },
+  applicantMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  applicantDetail: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray600,
+    lineHeight: 20,
+  },
+  applicantCardActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.gray200,
+  },
+  messageBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  messageBtnText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.primary,
+  },
+  viewProfileBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary,
+  },
+  viewProfileBtnText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.white,
+  },
+
+  // Premium Profile Modal
+  profileHeader: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: 60,
+    paddingBottom: Spacing.sm,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  profileModalAvatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: Colors.gray200,
+    borderWidth: 4,
+    borderColor: Colors.white,
+  },
+  statusDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: Colors.success,
+    borderWidth: 2.5,
+    borderColor: Colors.white,
+  },
+  profileInfoSection: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: AVATAR_OVERLAP + 16,
+    alignItems: 'center',
+  },
+  profileName: {
+    fontSize: FontSizes.xl,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+    textAlign: 'center',
+  },
+  profileProfession: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.medium as any,
+    color: Colors.primary,
+    marginTop: 4,
+    textAlign: 'center',
+    textTransform: 'capitalize',
+  },
+  profileLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  profileLocationText: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray500,
+  },
+  profileActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: Spacing.lg,
+    width: '100%',
+  },
+  profileActionOutline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  profileActionOutlineText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.primary,
+  },
+  profileActionPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary,
+  },
+  profileActionPrimaryText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.white,
+  },
+  profileActionSaved: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  profileSection: {
+    width: '100%',
+    marginTop: Spacing.lg,
+  },
+  profileSectionTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray800,
+    marginBottom: 10,
+  },
+  bioText: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray600,
+    lineHeight: 22,
+  },
+  skillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  skillChip: {
+    backgroundColor: Colors.primary + '0E',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: Colors.primary + '20',
+  },
+  skillChipText: {
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.primary,
+  },
+  activityGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  activityCard: {
+    flex: 1,
+    backgroundColor: Colors.gray50,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+  },
+  activityValue: {
+    fontSize: FontSizes.xl,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+  },
+  activityLabel: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray500,
+    fontWeight: FontWeights.medium as any,
+  },
+  skeletonAvatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: Colors.gray200,
+    borderWidth: 4,
+    borderColor: Colors.white,
+  },
+  skeletonBlock: {
+    backgroundColor: Colors.gray200,
+    borderRadius: BorderRadius.sm,
   },
 });

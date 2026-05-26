@@ -287,6 +287,19 @@ export async function getJobApplicants(token: string, jobId: string) {
   }
 }
 
+export async function getUserProfile(token: string, userId: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/profile/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) return { data: null, error: data.error || 'Failed to fetch profile' };
+    return { data: data.user, error: null };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Network request failed' };
+  }
+}
+
 export async function getJobApplicantStats(token: string, jobId: string) {
   try {
     const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}/applicants/stats`, {
