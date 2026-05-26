@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-  ActivityIndicator, Modal, TextInput, Alert, Share, Linking,
+  ActivityIndicator, Modal, TextInput, Alert, Linking,
   Animated, useWindowDimensions, Pressable, Dimensions, PanResponder,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -26,6 +26,7 @@ import {
 import { createMyPost, deleteMyPost, getMyPosts, MyPost, updateMyPostCaption } from '@/lib/postsApi';
 import { Button } from '@/components/Button';
 import Stars from '@/components/Stars';
+import ShareProfileAction from '@/components/share/ShareProfileAction';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = Spacing.lg;
@@ -36,7 +37,6 @@ const POST_ITEM_WIDTH = (SCREEN_WIDTH - CARD_MARGIN * 2 - Spacing.md * 2 - (COL_
 const MENU_ITEMS = [
   { icon: Shield, label: 'Verification', color: Colors.primary, desc: 'Verify your identity' },
   { icon: Award, label: 'Badges & Achievements', color: Colors.accent, desc: 'Your earned badges' },
-  { icon: Briefcase, label: 'My Portfolio', color: Colors.secondary, desc: 'Showcase your work' },
   { icon: Star, label: 'Reviews & Ratings', color: '#F59E0B', desc: 'See what others say' },
 ];
 
@@ -60,6 +60,8 @@ const SUB_PROFESSIONS: Record<string, string[]> = {
   engineering: ["Civil Engineer", "Mechanical Engineer", "Electrical Engineer", "Architect", "Structural Engineer"],
   professional: ["Product Manager", "Digital Marketer", "Doctor", "Nurse", "Pharmacist", "Lawyer", "Chartered Accountant", "Teacher / Educator", "Consultant"],
 };
+
+const PROFESSIONAL_CATEGORIES: ProfessionOption[] = ['tech', 'creative', 'engineering', 'professional'];
 
 type ProfessionOption = (typeof PROFESSION_OPTIONS)[number];
 type VerificationStatus = 'none' | 'pending' | 'verified' | 'rejected';
@@ -263,6 +265,7 @@ export default function ProfileScreen() {
     gender: '',
     profession: 'none' as string,
     skillsText: '',
+    expertiseSelections: [] as string[],
     bio: '',
     avatar: '',
     userGoal: '',
@@ -421,6 +424,7 @@ export default function ProfileScreen() {
     if (profile) {
       let selectedCategory = '';
       let customProfession = '';
+      let expertiseSelections: string[] = [];
       if (profile.profession) {
         if (profile.profession === "none") selectedCategory = "none";
         else if (profile.profession === "freelancer") selectedCategory = "freelancer";
@@ -433,12 +437,19 @@ export default function ProfileScreen() {
           if (!found) { selectedCategory = "other"; customProfession = profile.profession; }
         }
       }
+
+      if (selectedCategory && SUB_PROFESSIONS[selectedCategory]) {
+        expertiseSelections = profile.skills.filter((skill) => SUB_PROFESSIONS[selectedCategory].includes(skill));
+      }
+
       setEditForm({
         fullName: profile.fullName, city: profile.city || profile.location || '',
         pincode: profile.pincode || '', phoneNumber: profile.phoneNumber || '',
         age: profile.age !== null && profile.age !== undefined ? String(profile.age) : '',
         gender: profile.gender || '', profession: profile.profession || 'none',
-        skillsText: profile.skills.join(', '), bio: profile.bio, avatar: profile.avatar,
+        skillsText: profile.skills.filter((skill) => !expertiseSelections.includes(skill)).join(', '),
+        expertiseSelections,
+        bio: profile.bio, avatar: profile.avatar,
         coverPhoto: profile.coverPhotoUrl || '', userGoal: profile.userGoal || '',
         socialLinks: profile.socialLinks || [], selectedCategory, customProfession,
       });
@@ -449,7 +460,7 @@ export default function ProfileScreen() {
 
   const handleCloseEditModal = () => {
     setShowEditModal(false);
-    setEditForm({ fullName: '', city: '', pincode: '', phoneNumber: '', age: '', gender: '', profession: 'none', skillsText: '', bio: '', avatar: '', userGoal: '', socialLinks: [], customProfession: '', selectedCategory: '', coverPhoto: '' });
+    setEditForm({ fullName: '', city: '', pincode: '', phoneNumber: '', age: '', gender: '', profession: 'none', skillsText: '', expertiseSelections: [], bio: '', avatar: '', userGoal: '', socialLinks: [], customProfession: '', selectedCategory: '', coverPhoto: '' });
     setEditError(null);
   };
 
@@ -579,14 +590,20 @@ export default function ProfileScreen() {
       parsedAge = Number(editForm.age.trim());
       if (!Number.isFinite(parsedAge) || parsedAge < 0 || parsedAge > 120) { setEditError('Age must be between 0 and 120.'); return; }
     }
-    const skills = editForm.skillsText.split(',').map((s) => s.trim()).filter(Boolean);
+    const expertiseSkills = Array.from(new Set(editForm.expertiseSelections.map((skill) => skill.trim()).filter(Boolean)));
+    const freeformSkills = editForm.skillsText.split(',').map((s) => s.trim()).filter(Boolean);
+    const skills = Array.from(new Set([...expertiseSkills, ...freeformSkills]));
     const socialLinks = editForm.socialLinks.map((link) => ({ platform: String(link.platform || '').trim().toLowerCase(), url: normalizeUrl(link.url) })).filter((link) => link.platform && link.url);
     let finalProfession = editForm.profession;
     if (editForm.selectedCategory === "none") finalProfession = "none";
     else if (editForm.selectedCategory === "freelancer") finalProfession = "freelancer";
     else if (editForm.selectedCategory === "student") finalProfession = "student";
-    else if (editForm.selectedCategory === "other") finalProfession = editForm.customProfession || "other";
-    else if (editForm.profession === "other") finalProfession = editForm.customProfession || "other";
+    else if (editForm.selectedCategory === "other") finalProfession = "other";
+    else if (PROFESSIONAL_CATEGORIES.includes(editForm.selectedCategory as ProfessionOption)) finalProfession = editForm.selectedCategory;
+    else if (editForm.profession === "other") finalProfession = "other";
+    if (!['tech', 'creative', 'engineering', 'professional', 'freelancer', 'student', 'none', 'other'].includes(finalProfession)) {
+      finalProfession = 'none';
+    }
     const normalizedGoal = editForm.userGoal === 'OFFER_SERVICE' || editForm.userGoal === 'HIRE_PROFESSIONALS' ? editForm.userGoal : '';
     setEditLoading(true); setEditError(null);
     try {
@@ -644,24 +661,6 @@ export default function ProfileScreen() {
         setLocalCoverPreview(null);
       }
     } catch { Alert.alert('Unable to remove cover photo'); }
-  };
-
-  const handleShareProfile = async () => {
-    if (!profile) return;
-    const shareMessage = [
-      profile.fullName,
-      profile.profession && profile.profession !== 'none' ? formatProfessionLabel(profile.profession) : '',
-      profile.city || profile.location || '',
-    ].filter(Boolean).join(' • ');
-    try {
-      await Share.share({ message: shareMessage || 'Check out this Krovaa profile.' });
-    } catch {
-      try {
-        const link = `https://krovaa.com/s/${(profile as any).shareId || profile.username}`;
-        await Clipboard.setStringAsync(link);
-        Alert.alert('Link copied', 'Profile link copied to clipboard.');
-      } catch { Alert.alert('Unable to share profile'); }
-    }
   };
 
   const handleRequestVerification = async () => {
@@ -724,7 +723,6 @@ export default function ProfileScreen() {
   const handleMenuPress = (label: string) => {
     if (label === 'Verification') { setShowVerificationModal(true); return; }
     if (label === 'Badges & Achievements') { setShowBadgesModal(true); return; }
-    if (label === 'My Portfolio') { scrollViewRef.current?.scrollToEnd({ animated: true }); return; }
     if (label === 'Reviews & Ratings') {
       setShowAllRatings(false); setShowRatingsModal(true);
       void loadRatingEligibility(); void loadRatings();
@@ -886,6 +884,12 @@ export default function ProfileScreen() {
 
   const goalLabel = formatGoal(profile.userGoal);
   const isOwnProfile = !!currentUser && !!profile && String(profile.id) === String(currentUser.id);
+  const profileShareUrl = profile ? `https://krovaa.com/s/${(profile as any).shareId || profile.username}` : '';
+  const profileShareTitle = profile
+    ? (profile.profession && profile.profession !== 'none'
+      ? formatProfessionLabel(profile.profession)
+      : profile.bio?.trim().slice(0, 72) || 'Professional profile')
+    : 'Professional profile';
 
   const badgesData = [
     { title: 'Verified Profile', description: 'Identity and trust verified.', color: Colors.primary, active: verificationStatus === 'verified' },
@@ -911,9 +915,17 @@ export default function ProfileScreen() {
             )}
             <View style={styles.coverOverlay} />
             <View style={styles.coverActions}>
-              <AnimatedPressable onPress={handleShareProfile} style={styles.coverActionBtn}>
-                <Share2 size={16} color={Colors.white} />
-              </AnimatedPressable>
+              <ShareProfileAction
+                profileUrl={profileShareUrl}
+                userName={profile.fullName || profile.username || 'User'}
+                userTitle={profileShareTitle}
+              >
+                {({ openShare, isSharing }) => (
+                  <AnimatedPressable onPress={openShare} style={styles.coverActionBtn} disabled={isSharing}>
+                    <Share2 size={16} color={Colors.white} />
+                  </AnimatedPressable>
+                )}
+              </ShareProfileAction>
             </View>
             {!!goalLabel && (
               <View style={styles.goalBadge}>
@@ -1278,7 +1290,18 @@ export default function ProfileScreen() {
                   <Text style={styles.formLabel}>Profession</Text>
                   <View style={styles.chipWrap}>
                     {CATEGORIES.map((cat) => (
-                      <TouchableOpacity key={cat.id} style={[styles.chip, editForm.selectedCategory === cat.id && styles.chipActive]} onPress={() => setEditForm((prev) => ({ ...prev, selectedCategory: cat.id, profession: 'none', customProfession: '' }))} activeOpacity={0.7}>
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[styles.chip, editForm.selectedCategory === cat.id && styles.chipActive]}
+                        onPress={() => setEditForm((prev) => ({
+                          ...prev,
+                          selectedCategory: cat.id,
+                          profession: cat.id,
+                          customProfession: '',
+                          expertiseSelections: [],
+                        }))}
+                        activeOpacity={0.7}
+                      >
                         <cat.icon size={14} color={editForm.selectedCategory === cat.id ? Colors.primary : Colors.gray600} />
                         <Text style={[styles.chipText, editForm.selectedCategory === cat.id && styles.chipTextActive]}>{cat.label}</Text>
                       </TouchableOpacity>
@@ -1288,10 +1311,24 @@ export default function ProfileScreen() {
                   {editForm.selectedCategory && SUB_PROFESSIONS[editForm.selectedCategory] && (
                     <View style={{ marginTop: 12 }}>
                       <Text style={styles.formLabel}>Expertise</Text>
+                      <Text style={styles.helperText}>Select one or more.</Text>
                       <View style={styles.chipWrap}>
                         {SUB_PROFESSIONS[editForm.selectedCategory].map((prof) => (
-                          <TouchableOpacity key={prof} style={[styles.chip, editForm.profession === prof && styles.chipActive]} onPress={() => setEditForm((prev) => ({ ...prev, profession: prof, customProfession: '' }))} activeOpacity={0.7}>
-                            <Text style={[styles.chipText, editForm.profession === prof && styles.chipTextActive]}>{prof}</Text>
+                          <TouchableOpacity
+                            key={prof}
+                            style={[styles.chip, editForm.expertiseSelections.includes(prof) && styles.chipActive]}
+                            onPress={() => setEditForm((prev) => {
+                              const isSelected = prev.expertiseSelections.includes(prof);
+                              return {
+                                ...prev,
+                                expertiseSelections: isSelected
+                                  ? prev.expertiseSelections.filter((item) => item !== prof)
+                                  : [...prev.expertiseSelections, prof],
+                              };
+                            })}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.chipText, editForm.expertiseSelections.includes(prof) && styles.chipTextActive]}>{prof}</Text>
                           </TouchableOpacity>
                         ))}
                         <TouchableOpacity style={[styles.chip, editForm.profession === 'other' && styles.chipActive]} onPress={() => setEditForm((prev) => ({ ...prev, profession: 'other', customProfession: '' }))} activeOpacity={0.7}>
