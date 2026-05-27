@@ -23,7 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
-import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import { Colors, FontWeights, Spacing, BorderRadius, FontSizes, getThemeMode } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { API_BASE_URL } from '@/lib/apiBaseUrl';
 import {
@@ -157,6 +157,8 @@ export default function ChatDetailScreen() {
 
   const conversationId = String(params.id ?? '');
   const currentUserId = session?.user.id ?? '';
+  const isDarkMode = getThemeMode() === 'dark';
+  const blurTint = isDarkMode ? 'dark' : 'light';
 
   useEffect(() => {
     const cached = getConversationCache(conversationId);
@@ -970,8 +972,8 @@ export default function ChatDetailScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.select({ ios: 'padding', android: 'height' })}>
-      <View style={styles.header}>
+    <KeyboardAvoidingView style={[styles.container, { backgroundColor: Colors.gray50 }]} behavior={Platform.select({ ios: 'padding', android: 'height' })}>
+      <View style={[styles.header, { backgroundColor: Colors.white, borderBottomColor: Colors.gray200 }]}>
         <TouchableOpacity style={styles.backIconButton} onPress={() => router.back()}>
           <ArrowLeft size={20} color={Colors.gray900} />
         </TouchableOpacity>
@@ -998,8 +1000,8 @@ export default function ChatDetailScreen() {
       </View>
 
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={toggleMenu}>
-        <Pressable style={styles.modalOverlay} onPress={toggleMenu}>
-          <View style={styles.menuDropdown}>
+        <Pressable style={[styles.modalOverlay, { backgroundColor: isDarkMode ? 'rgba(2,6,23,0.65)' : 'rgba(0,0,0,0.05)' }]} onPress={toggleMenu}>
+          <View style={[styles.menuDropdown, { backgroundColor: Colors.white, borderColor: Colors.gray200 }]}>
             <TouchableOpacity
               style={styles.menuOption}
               onPress={() => { setMenuVisible(false); setSearchVisible(true); }}
@@ -1029,7 +1031,7 @@ export default function ChatDetailScreen() {
       </Modal>
 
       {selectionModeActive && (
-        <BlurView intensity={24} tint="light" style={styles.selectionToolbar}>
+        <BlurView intensity={24} tint={blurTint as any} style={[styles.selectionToolbar, { borderBottomColor: Colors.gray200 }]}>
           <View style={styles.selectionToolbarContent}>
             <TouchableOpacity onPress={clearSelection} style={styles.selectionToolbarClose} activeOpacity={0.7}>
               <X size={18} color={Colors.gray900} />
@@ -1060,7 +1062,7 @@ export default function ChatDetailScreen() {
         </BlurView>
       )}
 
-      <Pressable style={styles.messagesSurface} onPress={selectionModeActive ? clearSelection : undefined}>
+      <Pressable style={[styles.messagesSurface, { backgroundColor: Colors.gray50 }]} onPress={selectionModeActive ? clearSelection : undefined}>
         <ScrollView
           ref={scrollViewRef}
           contentContainerStyle={styles.messages}
@@ -1111,7 +1113,7 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <BlurView intensity={24} tint="light" style={styles.composerShell}>
+        <BlurView intensity={24} tint={blurTint as any} style={[styles.composerShell, { borderColor: Colors.gray200, backgroundColor: Colors.white }]}>
           {replyToMessage && (
             <View style={styles.replyPreview}>
               <View style={styles.replyPreviewAccent} />
@@ -1157,8 +1159,8 @@ export default function ChatDetailScreen() {
       )}
 
       <Modal visible={attachmentModalVisible} transparent animationType="fade" onRequestClose={() => setAttachmentModalVisible(false)}>
-        <Pressable style={styles.attachmentOverlay} onPress={() => setAttachmentModalVisible(false)}>
-          <Pressable style={styles.attachmentSheet} onPress={() => undefined}>
+        <Pressable style={[styles.attachmentOverlay, { backgroundColor: isDarkMode ? 'rgba(2,6,23,0.7)' : 'rgba(0,0,0,0.5)' }]} onPress={() => setAttachmentModalVisible(false)}>
+          <Pressable style={[styles.attachmentSheet, { backgroundColor: Colors.white, borderTopColor: Colors.gray200 }]} onPress={() => undefined}>
             <Text style={styles.attachmentTitle}>Add Attachment</Text>
             <TouchableOpacity style={styles.attachmentOption} onPress={pickFromGallery}>
               <View style={styles.attachmentIconContainer}>
@@ -1192,8 +1194,8 @@ export default function ChatDetailScreen() {
       </Modal>
 
       <Modal visible={forwardModalVisible} transparent animationType="slide" onRequestClose={() => setForwardModalVisible(false)}>
-        <View style={styles.attachmentOverlay}>
-          <View style={[styles.attachmentSheet, { maxHeight: '70%' }]}>
+        <View style={[styles.attachmentOverlay, { backgroundColor: isDarkMode ? 'rgba(2,6,23,0.7)' : 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.attachmentSheet, { maxHeight: '70%', backgroundColor: Colors.white }]}>
             <Text style={styles.attachmentTitle}>Forward to</Text>
             <ScrollView>
               {forwardConversations.map((convo) => {
@@ -1217,7 +1219,7 @@ export default function ChatDetailScreen() {
       </Modal>
 
       <Modal visible={!!selectedAttachment} transparent animationType="fade" onRequestClose={() => setSelectedAttachment(null)}>
-        <Pressable style={styles.viewerOverlay} onPress={() => setSelectedAttachment(null)}>
+        <Pressable style={[styles.viewerOverlay, { backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.95)' : 'rgba(0, 0, 0, 0.95)' }]} onPress={() => setSelectedAttachment(null)}>
           <View style={styles.viewerContainer}>
             {selectedAttachment?.type === 'image' && (
               <Image source={{ uri: selectedAttachment.url }} style={styles.viewerImage} resizeMode="contain" />
@@ -1253,8 +1255,8 @@ export default function ChatDetailScreen() {
       </Modal>
 
       <Modal visible={searchVisible} transparent animationType="slide" onRequestClose={() => setSearchVisible(false)}>
-        <View style={styles.searchContainer}>
-          <View style={styles.searchHeader}>
+        <View style={[styles.searchContainer, { backgroundColor: Colors.white }]}>
+          <View style={[styles.searchHeader, { backgroundColor: Colors.white, borderBottomColor: Colors.gray200 }]}>
             <TouchableOpacity onPress={() => setSearchVisible(false)}>
               <ArrowLeft size={24} color={Colors.gray900} />
             </TouchableOpacity>
@@ -1297,8 +1299,8 @@ export default function ChatDetailScreen() {
       </Modal>
 
       <Modal visible={mediaVisible} transparent animationType="slide" onRequestClose={() => setMediaVisible(false)}>
-        <View style={styles.mediaContainer}>
-          <View style={styles.mediaHeader}>
+        <View style={[styles.mediaContainer, { backgroundColor: Colors.gray50 }]}>
+          <View style={[styles.mediaHeader, { borderBottomColor: Colors.gray200 }]}>
             <TouchableOpacity onPress={() => setMediaVisible(false)}>
               <ArrowLeft size={24} color={Colors.white} />
             </TouchableOpacity>
@@ -1345,8 +1347,8 @@ export default function ChatDetailScreen() {
       </Modal>
 
       <Modal visible={blockModalVisible} transparent animationType="fade" onRequestClose={() => setBlockModalVisible(false)}>
-        <Pressable style={styles.blockOverlay} onPress={() => setBlockModalVisible(false)}>
-          <View style={styles.blockDialog}>
+        <Pressable style={[styles.blockOverlay, { backgroundColor: isDarkMode ? 'rgba(2,6,23,0.7)' : 'rgba(0, 0, 0, 0.5)' }]} onPress={() => setBlockModalVisible(false)}>
+          <View style={[styles.blockDialog, { backgroundColor: Colors.white }]}>
             <Text style={styles.blockTitle}>
               {isParticipantBlocked ? `Unblock ${participant?.fullName || 'this user'}?` : `Block ${participant?.fullName || 'this user'}?`}
             </Text>
@@ -1382,9 +1384,9 @@ export default function ChatDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+    container: {
     flex: 1,
-    backgroundColor: '#F7F8FC',
+    backgroundColor: Colors.gray50,
   },
   header: {
     flexDirection: 'row',
@@ -1482,7 +1484,7 @@ const styles = StyleSheet.create({
     zIndex: 30,
     paddingTop: 56,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
+    borderBottomColor: Colors.gray200,
   },
   selectionToolbarContent: {
     flexDirection: 'row',
@@ -1518,7 +1520,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.76)',
+    backgroundColor: Colors.white,
   },
   messagesSurface: {
     flex: 1,
@@ -1592,14 +1594,14 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   myBubble: {
-    backgroundColor: '#0b7ed0',
+    backgroundColor: Colors.primary,
     borderBottomRightRadius: 8,
     alignSelf: 'flex-end',
   },
   selectedBubble: {
     borderWidth: 1.5,
     borderColor: Colors.primary,
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
+    backgroundColor: Colors.gray100,
   },
   forwardedRow: {
     flexDirection: 'row',
@@ -1616,7 +1618,7 @@ const styles = StyleSheet.create({
   repliedMessageCard: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
+    backgroundColor: Colors.gray100,
     borderRadius: 16,
     marginBottom: 8,
     overflow: 'hidden',
@@ -1700,7 +1702,7 @@ const styles = StyleSheet.create({
   composer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: Colors.white,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
@@ -1710,7 +1712,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: Colors.gray200,
   },
   attachButton: {
     width: 42,
@@ -1736,11 +1738,11 @@ const styles = StyleSheet.create({
   replyPreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
+    backgroundColor: Colors.gray100,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
+    borderBottomColor: Colors.gray200,
   },
   replyPreviewAccent: {
     width: 3,
@@ -1802,7 +1804,7 @@ const styles = StyleSheet.create({
   },
   attachmentOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: Colors.gray50,
     justifyContent: 'flex-end',
   },
   attachmentSheet: {
@@ -1828,7 +1830,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray50,
     paddingHorizontal: Spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: Colors.gray200,
   },
   attachmentIconContainer: {
     width: 48,
@@ -1869,7 +1871,7 @@ const styles = StyleSheet.create({
   attachmentPlaceholder: {
     width: 160,
     height: 140,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: Colors.gray200,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1910,12 +1912,12 @@ const styles = StyleSheet.create({
   viewerPlaceholder: {
     width: 200,
     height: 200,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: Colors.gray200,
     borderRadius: BorderRadius.lg,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: Colors.gray300,
   },
   viewerPlaceholderText: {
     fontSize: 60,
@@ -1968,7 +1970,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
     gap: Spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: Colors.white,
   },
   searchInput: {
     flex: 1,
@@ -2013,7 +2015,7 @@ const styles = StyleSheet.create({
   },
   mediaContainer: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: Colors.gray50,
     paddingTop: 56,
   },
   mediaHeader: {
@@ -2023,7 +2025,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: Colors.gray200,
   },
   mediaHeaderTitle: {
     fontSize: FontSizes.lg,
@@ -2069,7 +2071,7 @@ const styles = StyleSheet.create({
   },
   blockOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: Colors.gray50,
     justifyContent: 'center',
     alignItems: 'center',
   },

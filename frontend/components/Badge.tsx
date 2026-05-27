@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { Colors } from '@/constants/theme';
 
 type Props = {
   children: React.ReactNode;
@@ -30,10 +31,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   primary: {
-    backgroundColor: '#E6F6FF',
+    backgroundColor: Colors.gray100,
   },
   muted: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: Colors.gray100,
   },
 });
 

@@ -304,3 +304,18 @@ export async function rateUser(
 export async function getUserRatings(userId: string) {
   return publicRequest<RatingsResponse>(`/api/profile/ratings/${encodeURIComponent(userId)}`);
 }
+
+export async function blockUser(token: string, blockedUserId: string) {
+  return authRequest<{ message: string; blockedUsers: string[] }>(`/api/profile/block/${encodeURIComponent(blockedUserId)}`, 'POST', token);
+}
+
+export async function unblockUser(token: string, blockedUserId: string) {
+  return authRequest<{ message: string; blockedUsers: string[] }>(`/api/profile/unblock/${encodeURIComponent(blockedUserId)}`, 'POST', token);
+}
+
+export async function getBlockedUsers(token: string) {
+  // Reuse getCurrentUserProfile to obtain blockedUsers list
+  const res = await getCurrentUserProfile(token);
+  if (res.error) return { error: res.error, data: null };
+  return { data: res.data?.user.blockedUsers || [], error: null };
+}

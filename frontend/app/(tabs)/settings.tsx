@@ -1,6 +1,15 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Bell, Lock, Globe, Circle as HelpCircle, LogOut, ChevronRight, Moon, Shield, Smartphone, MessageSquare } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Bell, Lock, Circle as HelpCircle, LogOut, ChevronRight, Shield, Smartphone, Sparkles, Info } from 'lucide-react-native';
 import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'expo-router';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 
 const SETTINGS_SECTIONS = [
@@ -16,21 +25,21 @@ const SETTINGS_SECTIONS = [
     title: 'Preferences',
     items: [
       { icon: Bell, label: 'Notifications', color: Colors.warning },
-      { icon: Globe, label: 'Language', color: Colors.primary },
-      { icon: Moon, label: 'Dark Mode', color: Colors.gray700 },
+      { icon: Sparkles, label: 'Features', color: '#8B5CF6' },
     ],
   },
   {
     title: 'Support',
     items: [
       { icon: HelpCircle, label: 'Help Center', color: Colors.secondary },
-      { icon: MessageSquare, label: 'Contact Support', color: Colors.primary },
+      { icon: Info, label: 'About Us', color: '#3B82F6' },
     ],
   },
 ];
 
 export default function SettingsScreen() {
   const { signOut, user } = useAuth();
+  const router = useRouter();
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -42,21 +51,52 @@ export default function SettingsScreen() {
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
           <View style={styles.sectionCard}>
-            {section.items.map((item, index) => (
-              <TouchableOpacity
-                key={item.label}
-                style={[
-                  styles.settingItem,
-                  index < section.items.length - 1 && styles.settingItemBorder,
-                ]}
-              >
-                <View style={[styles.settingIcon, { backgroundColor: item.color + '15' }]}>
-                  <item.icon size={18} color={item.color} />
+            {section.items.map((item, index) => {
+              const isFeatureRow = item.label === 'Features';
+
+              return (
+                <View key={item.label}>
+                  <TouchableOpacity
+                    style={[
+                      styles.settingItem,
+                      index < section.items.length - 1 && styles.settingItemBorder,
+                    ]}
+                    onPress={() => {
+                      if (item.label === 'Privacy & Security') {
+                        router.push('/settings/privacy');
+                        return;
+                      }
+
+                      if (item.label === 'Notifications') {
+                        router.push('/settings/notifications');
+                        return;
+                      }
+
+                      if (item.label === 'Help Center') {
+                        router.push('/settings/help-center');
+                        return;
+                      }
+
+                      if (item.label === 'About Us') {
+                        router.push('/settings/about-us');
+                        return;
+                      }
+
+                      if (isFeatureRow) {
+                        router.push('/settings/features');
+                        return;
+                      }
+                    }}
+                  >
+                    <View style={[styles.settingIcon, { backgroundColor: item.color + '15' }]}>
+                      <item.icon size={18} color={item.color} />
+                    </View>
+                    <Text style={styles.settingLabel}>{item.label}</Text>
+                    <ChevronRight size={16} color={Colors.gray400} />
+                  </TouchableOpacity>
                 </View>
-                <Text style={styles.settingLabel}>{item.label}</Text>
-                <ChevronRight size={16} color={Colors.gray400} />
-              </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         </View>
       ))}
