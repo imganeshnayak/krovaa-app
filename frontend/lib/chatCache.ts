@@ -7,6 +7,11 @@ type ConversationCache<TMessages = any, TConversation = any> = {
 
 const conversationCache = new Map<string, ConversationCache>();
 let conversationsListCache: { conversations?: any[]; lastFetched?: number } | null = null;
+const conversationsListSubscribers = new Set<() => void>();
+
+function notifyConversationsListSubscribers() {
+  conversationsListSubscribers.forEach((listener) => listener());
+}
 
 export function getConversationCache(id: string) {
   return conversationCache.get(id) ?? null;
@@ -40,7 +45,15 @@ export function getConversationsListCache() {
 
 export function setConversationsListCache(data: { conversations?: any[] }) {
   conversationsListCache = { ...data, lastFetched: Date.now() };
+  notifyConversationsListSubscribers();
   return conversationsListCache;
+}
+
+export function subscribeConversationsListCache(listener: () => void) {
+  conversationsListSubscribers.add(listener);
+  return () => {
+    conversationsListSubscribers.delete(listener);
+  };
 }
 
 export default {
@@ -51,4 +64,5 @@ export default {
   clearConversationCache,
   getConversationsListCache,
   setConversationsListCache,
+  subscribeConversationsListCache,
 };

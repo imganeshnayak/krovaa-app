@@ -25,6 +25,7 @@ import {
   type ChatConversation,
   type ChatMessage,
 } from '@/lib/chatApi';
+import { getConversationsListCache, subscribeConversationsListCache } from '@/lib/chatCache';
 import { getUserProfileByUsername, type UserProfile } from '@/lib/profileApi';
 import { API_BASE_URL } from '@/lib/apiBaseUrl';
 
@@ -76,6 +77,17 @@ export default function ChatScreen() {
       refreshConversations();
     }, [refreshConversations])
   );
+
+  useEffect(() => {
+    const unsubscribeConversationsList = subscribeConversationsListCache(() => {
+      const cachedList = getConversationsListCache();
+      if (cachedList?.conversations) {
+        setConversations(cachedList.conversations);
+      }
+    });
+
+    return unsubscribeConversationsList;
+  }, []);
 
   useEffect(() => {
     let mounted = true;

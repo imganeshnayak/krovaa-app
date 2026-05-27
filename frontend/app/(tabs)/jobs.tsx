@@ -115,6 +115,9 @@ const AVATAR_OVERLAP = AVATAR_SIZE / 2;
 function getSavedApplicantsStorageKey(userId?: string | null) {
   return userId ? `krovaa.savedApplicants.${userId}` : null;
 }
+function getHiredApplicantsStorageKey(userId?: string | null) {
+  return userId ? `krovaa.hiredApplicants.${userId}` : null;
+}
 
 function getProfileInitials(name?: string) {
   const parts = String(name || '')
@@ -167,6 +170,8 @@ export default function JobsScreen() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [savedProfiles, setSavedProfiles] = useState<Set<string>>(new Set());
   const [savedProfilesLoaded, setSavedProfilesLoaded] = useState(false);
+  const [hiredApplicants, setHiredApplicants] = useState<Set<string>>(new Set());
+  const [hiredApplicantsLoaded, setHiredApplicantsLoaded] = useState(false);
   const profileCache = useRef<Record<string, any>>({});
   const profileContextRef = useRef<{ applicationId: string; jobId: string } | null>(null);
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -176,7 +181,7 @@ export default function JobsScreen() {
   const [dashboardJob, setDashboardJob] = useState<Job | null>(null);
   const [dashboardApplicants, setDashboardApplicants] = useState<JobApplicant[]>([]);
   const [dashboardLoading, setDashboardLoading] = useState(false);
-  const [applicantSubTab, setApplicantSubTab] = useState<'all' | 'saved'>('all');
+  const [applicantSubTab, setApplicantSubTab] = useState<'all' | 'saved' | 'hired'>('all');
 
   // Post form
   const [postTitle, setPostTitle] = useState('');
@@ -261,31 +266,47 @@ export default function JobsScreen() {
   useEffect(() => {
     let isMounted = true;
 
-    const loadSavedProfiles = async () => {
+    const loadPersistedData = async () => {
       const storageKey = getSavedApplicantsStorageKey(session?.user?.id);
-      if (!storageKey) {
+      const hiredKey = getHiredApplicantsStorageKey(session?.user?.id);
+
+      if (!storageKey || !hiredKey) {
         if (isMounted) {
           setSavedProfiles(new Set());
           setSavedProfilesLoaded(true);
+          setHiredApplicants(new Set());
+          setHiredApplicantsLoaded(true);
         }
         return;
       }
 
       try {
-        const rawSavedProfiles = await AsyncStorage.getItem(storageKey);
-        const savedIds = rawSavedProfiles ? JSON.parse(rawSavedProfiles) : [];
+        const [rawSaved, rawHired] = await Promise.all([
+          AsyncStorage.getItem(storageKey),
+          AsyncStorage.getItem(hiredKey),
+        ]);
         if (!isMounted) return;
+        const savedIds = rawSaved ? JSON.parse(rawSaved) : [];
+        const hiredIds = rawHired ? JSON.parse(rawHired) : [];
         setSavedProfiles(new Set(Array.isArray(savedIds) ? savedIds : []));
+        setHiredApplicants(new Set(Array.isArray(hiredIds) ? hiredIds : []));
       } catch (error) {
-        console.error('Failed to load saved applicants:', error);
-        if (isMounted) setSavedProfiles(new Set());
+        console.error('Failed to load saved/hired applicants:', error);
+        if (isMounted) {
+          setSavedProfiles(new Set());
+          setHiredApplicants(new Set());
+        }
       } finally {
-        if (isMounted) setSavedProfilesLoaded(true);
+        if (isMounted) {
+          setSavedProfilesLoaded(true);
+          setHiredApplicantsLoaded(true);
+        }
       }
     };
 
     setSavedProfilesLoaded(false);
-    loadSavedProfiles();
+    setHiredApplicantsLoaded(false);
+    loadPersistedData();
 
     return () => {
       isMounted = false;
@@ -557,7 +578,9 @@ export default function JobsScreen() {
   const openProfileModal = async (applicant: JobApplicant, job?: Job | null) => {
     if (!session?.access_token) return;
     profileContextRef.current = job ? { applicationId: applicant.applicationId, jobId: job.id } : null;
-    if (applicant.status === 'accepted') hireStatusMap.current[applicant.id] = 'accepted';
+    if (applicant.status === 'accepted' || hiredApplicants.has(applicant.id)) {
+      hireStatusMap.current[applicant.id] = 'accepted';
+    }
     if (profileCache.current[applicant.id]) {
       setProfileUser(profileCache.current[applicant.id]);
       setShowProfileModal(true);
@@ -594,6 +617,19 @@ export default function JobsScreen() {
     }
   };
 
+  const persistHiredApplicant = (userId: string) => {
+    const hiredKey = getHiredApplicantsStorageKey(session?.user?.id);
+    if (!hiredKey) return;
+    setHiredApplicants((prev) => {
+      const next = new Set(prev);
+      next.add(userId);
+      AsyncStorage.setItem(hiredKey, JSON.stringify(Array.from(next))).catch((err) =>
+        console.error('Failed to persist hired applicant:', err)
+      );
+      return next;
+    });
+  };
+
   const executeHire = async () => {
     if (!session?.access_token || !profileUser?.id || !profileContextRef.current) return;
     const { applicationId, jobId } = profileContextRef.current;
@@ -605,6 +641,7 @@ export default function JobsScreen() {
         return;
       }
       hireStatusMap.current[profileUser.id] = 'accepted';
+      persistHiredApplicant(profileUser.id);
       setDashboardApplicants((prev) =>
         prev.map((a) => (a.id === profileUser.id ? { ...a, status: 'accepted' as const } : a))
       );
@@ -623,7 +660,7 @@ export default function JobsScreen() {
 
   const handleHireInvite = () => {
     if (!profileUser?.id) return;
-    const alreadyHired = hireStatusMap.current[profileUser.id] === 'accepted';
+    const alreadyHired = hireStatusMap.current[profileUser.id] === 'accepted' || hiredApplicants.has(profileUser.id);
     if (alreadyHired) {
       setShowRehireModal(true);
     } else {
@@ -690,6 +727,73 @@ export default function JobsScreen() {
       setProfileUser(data);
     }
     setProfileLoading(false);
+  };
+
+  const handleUnhireApplicant = (applicantId: string) => {
+    const hiredKey = getHiredApplicantsStorageKey(session?.user?.id);
+    if (!hiredKey) return;
+
+    setHiredApplicants((prev) => {
+      const next = new Set(prev);
+      next.delete(applicantId);
+      AsyncStorage.setItem(hiredKey, JSON.stringify(Array.from(next))).catch((err) =>
+        console.error('Failed to persist hired applicants:', err)
+      );
+      return next;
+    });
+    hireStatusMap.current[applicantId] = null;
+    setDashboardApplicants((prev) =>
+      prev.map((a) => (a.id === applicantId ? { ...a, status: undefined as any } : a))
+    );
+  };
+
+  const handleHireApplicantFromDashboard = async (applicant: JobApplicant, job: Job) => {
+    if (!session?.access_token) return;
+    const alreadyHired = hiredApplicants.has(applicant.id);
+    if (alreadyHired) {
+      Alert.alert(
+        'Already Hired',
+        'This applicant is already hired. Do you want to unhire this applicant?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Unhire', style: 'destructive', onPress: () => handleUnhireApplicant(applicant.id) },
+        ]
+      );
+      return;
+    }
+    setHiringLoading(true);
+    try {
+      const { error: statusError } = await updateApplicantStatus(
+        session.access_token, job.id, applicant.applicationId, 'accepted'
+      );
+      if (statusError) {
+        Alert.alert('Error', statusError);
+        return;
+      }
+      hireStatusMap.current[applicant.id] = 'accepted';
+      setDashboardApplicants((prev) =>
+        prev.map((a) => (a.id === applicant.id ? { ...a, status: 'accepted' as const } : a))
+      );
+      const hiredKey = getHiredApplicantsStorageKey(session?.user?.id);
+      if (hiredKey) {
+        setHiredApplicants((prev) => {
+          const next = new Set(prev);
+          next.add(applicant.id);
+          AsyncStorage.setItem(hiredKey, JSON.stringify(Array.from(next))).catch((err) =>
+            console.error('Failed to persist hired applicants:', err)
+          );
+          return next;
+        });
+      }
+      const { data: convData } = await createConversationWithUserId(session.access_token, applicant.id);
+      if (convData?.conversation) {
+        router.push(`/chat/${convData.conversation.id}`);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to hire applicant');
+    } finally {
+      setHiringLoading(false);
+    }
   };
 
   // Render job card
@@ -935,11 +1039,12 @@ export default function JobsScreen() {
 
             {/* Segmented Sub-Tabs */}
             <View style={styles.applicantSegmentedWrap}>
-              {(['all', 'saved'] as const).map((tab) => {
+              {(['all', 'saved', 'hired'] as const).map((tab) => {
                 const isActive = applicantSubTab === tab;
-                const count = tab === 'saved'
-                  ? dashboardApplicants.filter((a) => savedProfiles.has(a.id)).length
-                  : dashboardApplicants.length;
+                const count = tab === 'all' ? dashboardApplicants.length
+                  : tab === 'saved' ? dashboardApplicants.filter((a) => savedProfiles.has(a.id)).length
+                  : dashboardApplicants.filter((a) => hiredApplicants.has(a.id)).length;
+                const label = tab === 'all' ? 'All' : tab === 'saved' ? 'Saved' : 'Hired';
                 return (
                   <TouchableOpacity
                     key={tab}
@@ -948,7 +1053,7 @@ export default function JobsScreen() {
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.applicantSegmentedText, isActive && styles.applicantSegmentedTextActive]}>
-                      {tab === 'all' ? 'All' : 'Saved'}
+                      {label}
                     </Text>
                     <View style={[styles.applicantSegmentedBadge, isActive && styles.applicantSegmentedBadgeActive]}>
                       <Text style={[styles.applicantSegmentedBadgeText, isActive && styles.applicantSegmentedBadgeTextActive]}>{count}</Text>
@@ -974,22 +1079,39 @@ export default function JobsScreen() {
                 <Text style={styles.emptyTitle}>No saved applicants</Text>
                 <Text style={styles.emptyDesc}>Save applicant profiles to quickly find them later.</Text>
               </View>
+            ) : applicantSubTab === 'hired' && dashboardApplicants.filter((a) => hiredApplicants.has(a.id)).length === 0 ? (
+              <View style={[styles.emptyState, { paddingTop: 60 }]}>
+                <CheckCircle size={52} color={Colors.gray200} />
+                <Text style={styles.emptyTitle}>No hired applicants</Text>
+                <Text style={styles.emptyDesc}>Applicants you hire will appear here.</Text>
+              </View>
             ) : (
               <FlatList
                 data={applicantSubTab === 'saved'
                   ? dashboardApplicants.filter((a) => savedProfiles.has(a.id))
-                  : dashboardApplicants
+                  : applicantSubTab === 'hired'
+                    ? dashboardApplicants.filter((a) => hiredApplicants.has(a.id))
+                    : dashboardApplicants
                 }
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
                 renderItem={({ item }) => {
                   const isSaved = savedProfiles.has(item.id);
+                  const isHired = hiredApplicants.has(item.id);
                   return (
-                    <View style={styles.applicantCard}>
+                    <View style={[styles.applicantCard, isHired && styles.applicantCardHired]}>
                       <View style={styles.applicantCardTop}>
                         <Image source={{ uri: item.avatar }} style={styles.applicantAvatar} />
                         <View style={{ flex: 1, marginLeft: 12 }}>
-                          <Text style={styles.applicantName}>{item.name}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.applicantName}>{item.name}</Text>
+                            {isHired && (
+                              <View style={styles.hiredBadge}>
+                                <CheckCircle size={10} color={Colors.white} />
+                                <Text style={styles.hiredBadgeText}>Hired</Text>
+                              </View>
+                            )}
+                          </View>
                           {item.profession ? (
                             <Text style={styles.applicantBio} numberOfLines={1}>{item.profession}</Text>
                           ) : null}
@@ -1036,6 +1158,25 @@ export default function JobsScreen() {
                         >
                           <Eye size={15} color={Colors.white} />
                           <Text style={styles.viewProfileBtnText}>View Profile</Text>
+                        </AnimatedPressable>
+                        <AnimatedPressable
+                          style={[styles.hireBtn, isHired && styles.hireBtnActive]}
+                          onPress={() => handleHireApplicantFromDashboard(item, dashboardJob!)}
+                          disabled={hiringLoading}
+                        >
+                          {hiringLoading ? (
+                            <ActivityIndicator size="small" color={Colors.white} />
+                          ) : isHired ? (
+                            <>
+                              <CheckCircle size={15} color={Colors.white} />
+                              <Text style={styles.hireBtnText}>Hired</Text>
+                            </>
+                          ) : (
+                            <>
+                              <Award size={15} color={Colors.white} />
+                              <Text style={styles.hireBtnText}>Hire</Text>
+                            </>
+                          )}
                         </AnimatedPressable>
                       </View>
                     </View>
@@ -1304,14 +1445,14 @@ export default function JobsScreen() {
                   <AnimatedPressable
                     style={[
                       styles.profileActionPrimary,
-                      hireStatusMap.current[profileUser.id] === 'accepted' && styles.profileActionHired,
+                      (hireStatusMap.current[profileUser.id] === 'accepted' || hiredApplicants.has(profileUser.id)) && styles.profileActionHired,
                     ]}
                     onPress={handleHireInvite}
                     disabled={hiringLoading}
                   >
                     {hiringLoading ? (
                       <ActivityIndicator size="small" color={Colors.white} />
-                    ) : hireStatusMap.current[profileUser.id] === 'accepted' ? (
+                    ) : (hireStatusMap.current[profileUser.id] === 'accepted' || hiredApplicants.has(profileUser.id)) ? (
                       <>
                         <CheckCircle size={16} color={Colors.white} />
                         <Text style={styles.profileActionPrimaryText}>Hired</Text>
@@ -1355,14 +1496,24 @@ export default function JobsScreen() {
           <View style={styles.rehireModal}>
             <Text style={styles.rehireTitle}>Already Hired</Text>
             <Text style={styles.rehireBody}>
-              This applicant has already been hired. Do you want to continue the hiring process again?
+              This applicant is already hired. Do you want to unhire this applicant?
             </Text>
             <View style={styles.rehireActions}>
               <TouchableOpacity style={styles.rehireCancelBtn} onPress={() => setShowRehireModal(false)}>
                 <Text style={styles.rehireCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.rehireConfirmBtn} onPress={handleConfirmRehire}>
-                <Text style={styles.rehireConfirmText}>Continue</Text>
+              <TouchableOpacity
+                style={[styles.rehireConfirmBtn, { backgroundColor: Colors.gray700 }]}
+                onPress={() => {
+                  setShowRehireModal(false);
+                  if (profileUser?.id) {
+                    handleUnhireApplicant(profileUser.id);
+                    setShowProfileModal(false);
+                    setProfileError(null);
+                  }
+                }}
+              >
+                <Text style={styles.rehireConfirmText}>Unhire</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2621,9 +2772,45 @@ const styles = StyleSheet.create({
     color: Colors.gray600,
     lineHeight: 20,
   },
+  applicantCardHired: {
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.secondary,
+  },
+  hiredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  hiredBadgeText: {
+    color: Colors.white,
+    fontSize: 9,
+    fontWeight: FontWeights.bold as any,
+  },
+  hireBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.accent,
+  },
+  hireBtnActive: {
+    backgroundColor: Colors.secondary,
+  },
+  hireBtnText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.white,
+  },
   applicantCardActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginTop: Spacing.md,
     paddingTop: Spacing.md,
     borderTopWidth: 0.5,

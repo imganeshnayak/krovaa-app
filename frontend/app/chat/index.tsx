@@ -4,11 +4,11 @@ import { useRouter } from 'expo-router';
 import { /*useFocusEffect*/ } from '@react-navigation/native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { io } from 'socket.io-client';
-import { Archive } from 'lucide-react-native';
+import { Archive, MessageCircle } from 'lucide-react-native';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { getConversations, getConversationMessages, type ChatConversation } from '@/lib/chatApi';
-import { getConversationsListCache, setConversationsListCache, getConversationCache, setConversationCache } from '@/lib/chatCache';
+import { getConversationsListCache, setConversationsListCache, getConversationCache, setConversationCache, subscribeConversationsListCache } from '@/lib/chatCache';
 import { API_BASE_URL } from '@/lib/apiBaseUrl';
 
 export default function ChatListScreen() {
@@ -63,6 +63,13 @@ export default function ChatListScreen() {
     }
     load();
 
+    const unsubscribeConversationsList = subscribeConversationsListCache(() => {
+      const cachedList = getConversationsListCache();
+      if (cachedList?.conversations) {
+        setConversations(cachedList.conversations);
+      }
+    });
+
     let socket: any = null;
     if (session?.access_token) {
       socket = io(API_BASE_URL, { transports: ['websocket'], auth: { token: session.access_token } });
@@ -94,6 +101,7 @@ export default function ChatListScreen() {
 
     return () => {
       mounted = false;
+      unsubscribeConversationsList();
       if (socket) socket.disconnect();
     };
   }, [session?.access_token]);
@@ -195,15 +203,27 @@ export default function ChatListScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <MessageCircle size={24} color={Colors.primary} />
+          <Text style={styles.headerTitle}>Chats</Text>
+        </View>
+        <Text style={styles.headerCount}>{visibleConversations.length}</Text>
+      </View>
       <FlatList
         data={visibleConversations}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingVertical: Spacing.md }}
+        contentContainerStyle={{ paddingTop: Spacing.sm, paddingBottom: Spacing.xl }}
         initialNumToRender={12}
-        maxToRenderPerBatch={8}
+        maxToRenderPerBatch={10}
         windowSize={7}
         removeClippedSubviews={true}
+        getItemLayout={(_data, index) => ({
+          length: 90,
+          offset: 90 * index,
+          index,
+        })}
       />
     </View>
   );
@@ -211,7 +231,37 @@ export default function ChatListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F6F9FD' },
-  rowWrap: { marginHorizontal: 10, marginVertical: 6 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 56,
+    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerTitle: {
+    fontSize: FontSizes.xl,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+  },
+  headerCount: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray500,
+    fontWeight: FontWeights.medium as any,
+    backgroundColor: Colors.gray100,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  rowWrap: { marginHorizontal: 12, marginVertical: 5 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -224,8 +274,8 @@ const styles = StyleSheet.create({
   },
   unreadCard: { backgroundColor: 'rgba(14, 165, 233, 0.03)' },
   avatarWrap: { position: 'relative', marginRight: 14 },
-  avatar: { width: 58, height: 58, borderRadius: 29 },
-  onlineDot: { position: 'absolute', right: 1, bottom: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#0ea5e9', borderWidth: 2, borderColor: Colors.white },
+  avatar: { width: 56, height: 56, borderRadius: 28 },
+  onlineDot: { position: 'absolute', right: 1, bottom: 1, width: 12, height: 12, borderRadius: 6, backgroundColor: '#0ea5e9', borderWidth: 2.5, borderColor: Colors.white },
   meta: { flex: 1 },
   name: { fontSize: FontSizes.md, fontWeight: FontWeights.semiBold as any, color: Colors.gray900 },
   preview: { marginTop: 4, color: Colors.gray600 },
