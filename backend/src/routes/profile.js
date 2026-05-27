@@ -200,7 +200,7 @@ router.get('/code/:userCode', async (req, res) => {
       return res.status(400).json({ error: 'User code is required.' });
     }
 
-    const user = await User.findUnique({ where: { userCode }, include: { blockedUsers: true } });
+    const user = await User.findUnique({ where: { userCode } });
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -221,7 +221,7 @@ router.get('/username/:username', async (req, res) => {
       return res.status(400).json({ error: 'Username is required.' });
     }
 
-    const user = await User.findUnique({ where: { username }, include: { blockedUsers: true } });
+    const user = await User.findUnique({ where: { username } });
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -593,7 +593,7 @@ router.get('/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const user = await User.findUnique({ where: { id: parseInt(userId) }, include: { blockedUsers: true } });
+    const user = await User.findUnique({ where: { id: parseInt(userId) } });
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -608,7 +608,7 @@ router.get('/:userId', async (req, res) => {
 
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const user = await User.findUnique({ where: { id: req.userId }, include: { blockedUsers: true } });
+    const user = await User.findUnique({ where: { id: req.userId } });
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -685,20 +685,18 @@ router.put('/', verifyToken, async (req, res) => {
       ...(socialLinks !== undefined && { socialLinks: normalizeSocialLinks(socialLinks) }),
     };
 
-    await User.update({
+    const user = await User.update({
       where: { id: req.userId },
       data: updates,
     });
 
-    const refreshed = await User.findUnique({ where: { id: req.userId }, include: { blockedUsers: true } });
-
-    if (!refreshed) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
     return res.json({
       message: 'Profile updated successfully.',
-      user: mapUserResponse(refreshed),
+      user: await buildPublicProfileResponse(user),
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to update profile.' });
@@ -827,52 +825,6 @@ router.post('/verification/request', verifyToken, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to submit verification request.' });
-  }
-});
-
-// Block a user
-router.post('/block/:blockedUserId', verifyToken, async (req, res) => {
-  try {
-    const blockedUserId = parseInt(req.params.blockedUserId);
-    if (!Number.isInteger(blockedUserId)) {
-      return res.status(400).json({ error: 'Invalid user id.' });
-    }
-
-    if (blockedUserId === req.userId) {
-      return res.status(400).json({ error: 'You cannot block yourself.' });
-    }
-
-    // ensure target exists
-    const target = await User.findUnique({ where: { id: blockedUserId } });
-    if (!target) return res.status(404).json({ error: 'User to block not found.' });
-
-    try {
-      await prisma.blockedUser.create({ data: { blockerId: req.userId, blockedId: blockedUserId } });
-    } catch (err) {
-      // ignore unique constraint error
-    }
-
-    const refreshed = await User.findUnique({ where: { id: req.userId }, include: { blockedUsers: true } });
-    return res.json({ message: 'User blocked.', blockedUsers: refreshed ? refreshed.blockedUsers.map((b) => String(b.blockedId)) : [] });
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Unable to block user.' });
-  }
-});
-
-// Unblock a user
-router.post('/unblock/:blockedUserId', verifyToken, async (req, res) => {
-  try {
-    const blockedUserId = parseInt(req.params.blockedUserId);
-    if (!Number.isInteger(blockedUserId)) {
-      return res.status(400).json({ error: 'Invalid user id.' });
-    }
-
-    await prisma.blockedUser.deleteMany({ where: { blockerId: req.userId, blockedId: blockedUserId } });
-
-    const refreshed = await User.findUnique({ where: { id: req.userId }, include: { blockedUsers: true } });
-    return res.json({ message: 'User unblocked.', blockedUsers: refreshed ? refreshed.blockedUsers.map((b) => String(b.blockedId)) : [] });
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Unable to unblock user.' });
   }
 });
 

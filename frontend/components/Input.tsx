@@ -57,8 +57,8 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     fontSize: 15,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    color: Colors.gray900,
+    backgroundColor: Colors.white,
   },
   inputError: {
     borderColor: Colors.error,

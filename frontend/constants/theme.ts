@@ -1,7 +1,4 @@
-import { Appearance } from 'react-native';
-import { useSyncExternalStore } from 'react';
-
-const lightColors = {
+export const Colors = {
   primary: '#0066FF',
   secondary: '#00B341',
   accent: '#FF6B35',
@@ -21,68 +18,6 @@ const lightColors = {
   gray800: '#343A40',
   gray900: '#212529',
 };
-
-const darkColors = {
-  primary: '#5B9BFF',
-  secondary: '#2DD36F',
-  accent: '#FF8A5B',
-  success: '#2DD36F',
-  warning: '#FFB84D',
-  error: '#FF6B7A',
-  white: '#0B1220',
-  black: '#F8FAFC',
-  gray50: '#111827',
-  gray100: '#172033',
-  gray200: '#1F2937',
-  gray300: '#334155',
-  gray400: '#475569',
-  gray500: '#64748B',
-  gray600: '#94A3B8',
-  gray700: '#CBD5E1',
-  gray800: '#E2E8F0',
-  gray900: '#F8FAFC',
-};
-
-export type ThemeMode = 'light' | 'dark';
-
-export const THEME_STORAGE_KEY = 'krovaa.settings.theme';
-
-let currentThemeMode: ThemeMode = Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
-const themeListeners = new Set<() => void>();
-
-function emitThemeChange() {
-  themeListeners.forEach((listener) => listener());
-}
-
-function subscribeThemeChange(listener: () => void) {
-  themeListeners.add(listener);
-  return () => themeListeners.delete(listener);
-}
-
-export function getThemeMode() {
-  return currentThemeMode;
-}
-
-export function setThemeMode(mode: ThemeMode) {
-  if (currentThemeMode === mode) {
-    return;
-  }
-
-  currentThemeMode = mode;
-  Appearance.setColorScheme(mode);
-  emitThemeChange();
-}
-
-export function useThemeMode() {
-  return useSyncExternalStore(subscribeThemeChange, getThemeMode, getThemeMode);
-}
-
-export const Colors = new Proxy(lightColors, {
-  get(target, property: keyof typeof lightColors) {
-    const palette = currentThemeMode === 'dark' ? darkColors : lightColors;
-    return palette[property] ?? target[property];
-  },
-}) as typeof lightColors;
 
 export const FontWeights = {
   regular: '400' as const,

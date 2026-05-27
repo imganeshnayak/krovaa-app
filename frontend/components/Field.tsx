@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, TextInput, StyleSheet, TextStyle, ViewStyle } from 'react-native';
-import { Colors } from '@/constants/theme';
 
 type Props = {
   label?: string;
@@ -29,14 +28,14 @@ export const Field = ({ label, placeholder, value, onChangeText, textarea, style
 };
 
 const styles = StyleSheet.create({
-  label: { fontSize: 12, fontWeight: '700', color: Colors.gray700, marginBottom: 6 },
+  label: { fontSize: 12, fontWeight: '700', color: '#374151', marginBottom: 6 },
   input: {
     borderWidth: 1,
-    borderColor: Colors.gray300,
+    borderColor: '#E5E7EB',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: Colors.white,
+    backgroundColor: '#fff',
   },
   textarea: { minHeight: 80, textAlignVertical: 'top' },
 });
