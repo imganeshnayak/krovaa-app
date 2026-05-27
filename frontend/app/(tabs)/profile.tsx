@@ -1,57 +1,81 @@
 import React, { useEffect, useState, useRef } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-  ActivityIndicator, Modal, TextInput, Alert, Linking,
-  Animated, useWindowDimensions, Pressable, Dimensions, PanResponder,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Modal, TextInput, Alert, Share, Linking, Animated, ImageBackground, useWindowDimensions } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {
-  Star, MapPin, Edit3, ChevronRight, Shield, ShieldCheck, Award,
-  Briefcase, X, Video as VideoIcon, Camera, Code, Palette, Hammer,
-  GanttChart, Users, GraduationCap, UserCircle, HelpCircle, Share2,
-  Link2, ExternalLink, Facebook, Twitter, Instagram, Youtube, Linkedin,
-  Github, Globe, Mail, Phone, User, Calendar, MapPinned, CheckCircle,
-  Clock, BadgeCheck, ImagePlus, Plus, Trash2, Sparkles,
+  Star,
+  MapPin,
+  Edit3,
+  ChevronRight,
+  Shield,
+  ShieldCheck,
+  Award,
+  Briefcase,
+  X,
+  Video as VideoIcon,
+  Camera,
+  Code,
+  Palette,
+  Hammer,
+  GanttChart,
+  Users,
+  GraduationCap,
+  UserCircle,
+  HelpCircle,
+  Share2,
+  Link2,
+  ExternalLink,
+  Facebook,
+  Twitter,
+  Instagram,
+  Youtube,
+  Linkedin,
+  Github,
+  Globe,
+  Loader2,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ResizeMode, Video } from 'expo-av';
 import { useAuth } from '@/context/AuthContext';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 import {
-  applyForVerification, deleteCoverPhoto, deleteProfilePhoto,
-  getCurrentUserProfile, getRatingEligibility, getUserRatings,
-  getVerificationFee, getVerificationStatus, rateUser,
-  type UserProfile, updateUserProfile, uploadCoverPhoto, uploadProfilePhoto,
+  applyForVerification,
+  deleteCoverPhoto,
+  deleteProfilePhoto,
+  getCurrentUserProfile,
+  getRatingEligibility,
+  getUserRatings,
+  getVerificationFee,
+  getVerificationStatus,
+  rateUser,
+  type UserProfile,
+  updateUserProfile,
+  uploadCoverPhoto,
+  uploadProfilePhoto,
 } from '@/lib/profileApi';
 import { createMyPost, deleteMyPost, getMyPosts, MyPost, updateMyPostCaption } from '@/lib/postsApi';
 import { Button } from '@/components/Button';
+import Badge from '@/components/Badge';
 import Stars from '@/components/Stars';
-import ShareProfileAction from '@/components/share/ShareProfileAction';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_MARGIN = Spacing.lg;
-const CARD_GAP = 2;
-const COL_COUNT = 3;
-const POST_ITEM_WIDTH = (SCREEN_WIDTH - CARD_MARGIN * 2 - Spacing.md * 2 - (COL_COUNT - 1) * CARD_GAP) / COL_COUNT;
 
 const MENU_ITEMS = [
-  { icon: Shield, label: 'Verification', color: Colors.primary, desc: 'Verify your identity' },
-  { icon: Award, label: 'Badges & Achievements', color: Colors.accent, desc: 'Your earned badges' },
-  { icon: Star, label: 'Reviews & Ratings', color: '#F59E0B', desc: 'See what others say' },
+  { icon: Shield, label: 'Verification', color: Colors.primary },
+  { icon: Award, label: 'Badges & Achievements', color: Colors.accent },
+  { icon: Briefcase, label: 'My Portfolio', color: Colors.secondary },
+  { icon: Star, label: 'Reviews & Ratings', color: '#F59E0B' },
 ];
 
 const PROFESSION_OPTIONS = ['tech', 'creative', 'engineering', 'professional', 'freelancer', 'student', 'none', 'other'] as const;
 const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'] as const;
 
 const CATEGORIES = [
-  { id: "tech", label: "Tech", icon: Code },
-  { id: "creative", label: "Creative", icon: Palette },
-  { id: "engineering", label: "Engineering", icon: Hammer },
-  { id: "professional", label: "Professional", icon: GanttChart },
-  { id: "freelancer", label: "Freelancer", icon: Users },
-  { id: "student", label: "Student", icon: GraduationCap },
-  { id: "none", label: "None", icon: UserCircle },
-  { id: "other", label: "Other", icon: HelpCircle },
+  { id: "tech", label: "Tech", icon: Code, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" },
+  { id: "creative", label: "Creative", icon: Palette, color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/20" },
+  { id: "engineering", label: "Engineering", icon: Hammer, color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/20" },
+  { id: "professional", label: "Professional", icon: GanttChart, color: "text-emerald-400", bg: "bg-emerald-400/10", border: "border-emerald-400/20" },
+  { id: "freelancer", label: "Freelancer", icon: Users, color: "text-pink-400", bg: "bg-pink-400/10", border: "border-pink-400/20" },
+  { id: "student", label: "Student", icon: GraduationCap, color: "text-cyan-400", bg: "bg-cyan-400/10", border: "border-cyan-400/20" },
+  { id: "none", label: "None", icon: UserCircle, color: "text-indigo-400", bg: "bg-indigo-400/10", border: "border-indigo-400/20" },
+  { id: "other", label: "Other", icon: HelpCircle, color: "text-zinc-400", bg: "bg-zinc-400/10", border: "border-zinc-400/20" },
 ];
 
 const SUB_PROFESSIONS: Record<string, string[]> = {
@@ -60,10 +84,8 @@ const SUB_PROFESSIONS: Record<string, string[]> = {
   engineering: ["Civil Engineer", "Mechanical Engineer", "Electrical Engineer", "Architect", "Structural Engineer"],
   professional: ["Product Manager", "Digital Marketer", "Doctor", "Nurse", "Pharmacist", "Lawyer", "Chartered Accountant", "Teacher / Educator", "Consultant"],
 };
-
-const PROFESSIONAL_CATEGORIES: ProfessionOption[] = ['tech', 'creative', 'engineering', 'professional'];
-
 type ProfessionOption = (typeof PROFESSION_OPTIONS)[number];
+
 type VerificationStatus = 'none' | 'pending' | 'verified' | 'rejected';
 
 type ProfileRating = {
@@ -77,23 +99,6 @@ type ProfileRating = {
     avatar: string;
     username: string;
   };
-};
-
-const SOCIAL_PLATFORM_OPTIONS = [
-  { value: 'facebook', label: 'Facebook', icon: Facebook },
-  { value: 'twitter', label: 'Twitter / X', icon: Twitter },
-  { value: 'instagram', label: 'Instagram', icon: Instagram },
-  { value: 'youtube', label: 'YouTube', icon: Youtube },
-  { value: 'linkedin', label: 'LinkedIn', icon: Linkedin },
-  { value: 'github', label: 'GitHub', icon: Github },
-  { value: 'website', label: 'Website', icon: Globe },
-  { value: 'other', label: 'Other', icon: Link2 },
-];
-
-const SOCIAL_COLORS: Record<string, string> = {
-  facebook: '#1877F2', twitter: '#1DA1F2', instagram: '#E4405F',
-  youtube: '#FF0000', linkedin: '#0A66C2', github: '#333333',
-  website: Colors.primary, other: Colors.gray600,
 };
 
 function normalizeProfession(value: string): ProfessionOption {
@@ -119,6 +124,17 @@ function formatGoal(goal?: string) {
   return goal;
 }
 
+const SOCIAL_PLATFORM_OPTIONS = [
+  { value: 'facebook', label: 'Facebook', icon: Facebook },
+  { value: 'twitter', label: 'Twitter / X', icon: Twitter },
+  { value: 'instagram', label: 'Instagram', icon: Instagram },
+  { value: 'youtube', label: 'YouTube', icon: Youtube },
+  { value: 'linkedin', label: 'LinkedIn', icon: Linkedin },
+  { value: 'github', label: 'GitHub', icon: Github },
+  { value: 'website', label: 'Website', icon: Globe },
+  { value: 'other', label: 'Other', icon: Link2 },
+];
+
 const getSocialIcon = (platform: string) => {
   const value = platform.toLowerCase();
   if (value.includes('facebook')) return Facebook;
@@ -129,73 +145,6 @@ const getSocialIcon = (platform: string) => {
   if (value.includes('github')) return Github;
   return Globe;
 };
-
-function SkeletonBlock({ width, height, borderRadius = BorderRadius.md, style }: {
-  width?: number | string; height?: number | string; borderRadius?: number; style?: any;
-}) {
-  const opacity = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-
-  return (
-    <Animated.View
-      style={[{ width: width as any, height: height as any, borderRadius, backgroundColor: Colors.gray200, opacity }, style]}
-    />
-  );
-}
-
-function ProfileSkeleton() {
-  return (
-    <View style={{ paddingHorizontal: CARD_MARGIN }}>
-      <SkeletonBlock width="100%" height={170} borderRadius={BorderRadius.xl} style={{ marginBottom: -46 }} />
-      <View style={{ alignItems: 'center', marginTop: 0 }}>
-        <SkeletonBlock width={110} height={110} borderRadius={999} style={{ borderWidth: 4, borderColor: Colors.white }} />
-        <SkeletonBlock width={180} height={24} borderRadius={6} style={{ marginTop: 16 }} />
-        <SkeletonBlock width={120} height={16} borderRadius={6} style={{ marginTop: 8 }} />
-        <SkeletonBlock width={90} height={14} borderRadius={6} style={{ marginTop: 6 }} />
-      </View>
-      <SkeletonBlock width="100%" height={80} borderRadius={BorderRadius.lg} style={{ marginTop: 24 }} />
-      <SkeletonBlock width="100%" height={180} borderRadius={BorderRadius.lg} style={{ marginTop: 16 }} />
-      <SkeletonBlock width="100%" height={90} borderRadius={BorderRadius.lg} style={{ marginTop: 16 }} />
-      <SkeletonBlock width="100%" height={90} borderRadius={BorderRadius.lg} style={{ marginTop: 16 }} />
-    </View>
-  );
-}
-
-function SectionCard({ children, style }: { children: React.ReactNode; style?: any }) {
-  return <View style={[styles.card, style]}>{children}</View>;
-}
-
-function SectionTitle({ title, action }: { title: string; action?: React.ReactNode }) {
-  return (
-    <View style={styles.sectionTitleRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {action}
-    </View>
-  );
-}
-
-function AnimatedPressable({ children, onPress, style, activeOpacity = 0.92, ...props }: any) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const onPressIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  const onPressOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
-  return (
-    <Animated.View style={[{ transform: [{ scale }] }, style]}>
-      <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} {...props}>
-        {children}
-      </Pressable>
-    </Animated.View>
-  );
-}
 
 export default function ProfileScreen() {
   const { session, user: currentUser, loading: authLoading, signInDev } = useAuth() as any;
@@ -210,7 +159,6 @@ export default function ProfileScreen() {
   const [editLoading, setEditLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const [photoPickerTarget, setPhotoPickerTarget] = useState<'avatar' | 'cover' | null>(null);
   const [postsLoading, setPostsLoading] = useState(true);
   const [postUploading, setPostUploading] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
@@ -235,16 +183,8 @@ export default function ProfileScreen() {
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showRatingsModal, setShowRatingsModal] = useState(false);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
-  const [showMediaViewer, setShowMediaViewer] = useState(false);
-  const [mediaViewerIndex, setMediaViewerIndex] = useState(0);
-
-  const mediaViewerAnim = useRef(new Animated.Value(0)).current;
-  const mediaViewerPan = useRef(new Animated.ValueXY()).current;
-  const mediaViewerScale = useRef(new Animated.Value(0.92)).current;
-
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const sheetAnim = useRef(new Animated.Value(0)).current;
 
   const { width } = useWindowDimensions();
   const isTablet = width >= 700;
@@ -256,68 +196,88 @@ export default function ProfileScreen() {
     mediaItems: [] as Array<{ uri: string; mimeType: string }>,
   });
 
-  const [editForm, setEditForm] = useState({
-    fullName: '',
-    city: '',
-    pincode: '',
-    phoneNumber: '',
-    age: '',
-    gender: '',
-    profession: 'none' as string,
-    skillsText: '',
-    expertiseSelections: [] as string[],
-    bio: '',
-    avatar: '',
-    userGoal: '',
-    socialLinks: [] as Array<{ platform: string; url: string }>,
-    customProfession: '',
-    selectedCategory: '',
-    coverPhoto: '',
-  });
+const [editForm, setEditForm] = useState({
+  fullName: '',
+  city: '',
+  pincode: '',
+  phoneNumber: '',
+  age: '',
+  gender: '',
+  profession: 'none',
+  skillsText: '',
+  bio: '',
+  avatar: '',
+  userGoal: '',
+  socialLinks: [] as Array<{ platform: string; url: string }>,
+  customProfession: '',
+  selectedCategory: '',
+  coverPhoto: '',
+});
 
   useEffect(() => {
     let isMounted = true;
+
     async function fetchProfile() {
       if (!session?.access_token) {
         setError('No authentication token available');
         setLoading(false);
         return;
       }
+
       if (session.access_token === 'dev-token') {
         setLoading(false);
         return;
       }
+
       try {
         const { data, error: fetchError } = await getCurrentUserProfile(session.access_token);
         if (isMounted) {
-          if (fetchError) setError(fetchError);
-          else if (data) {
+          if (fetchError) {
+            setError(fetchError);
+          } else if (data) {
             setProfile(data.user);
-            if (session?.access_token && data?.user && currentUser && String(data.user.id) !== String(currentUser.id)) {
-              try {
-                const { data: eligData } = await getRatingEligibility(session.access_token, data.user.id);
-                if (eligData) {
+            // If viewing someone else's profile, fetch rating eligibility
+            try {
+              if (session?.access_token && data?.user && currentUser && String(data.user.id) !== String(currentUser.id)) {
+                const { data: eligData, error: eligErr } = await getRatingEligibility(session.access_token, data.user.id);
+                if (!eligErr && eligData) {
                   setCanRateUser(Boolean(eligData.canRate));
                   setRatingEligibilityReason(eligData.reason || '');
+                } else {
+                  setCanRateUser(false);
                 }
-              } catch { setCanRateUser(false); }
+              }
+            } catch {
+              setCanRateUser(false);
             }
           }
         }
-      } catch { if (isMounted) setError('Failed to load profile'); }
-      finally { if (isMounted) setLoading(false); }
+      } catch (err) {
+        if (isMounted) {
+          setError('Failed to load profile');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     }
+
     fetchProfile();
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+    };
   }, [session?.access_token]);
 
+  // Dev fallback: when using the dev sign-in helper, populate a minimal profile
   useEffect(() => {
     if (!__DEV__) return;
     if (!session?.access_token) return;
     if (profile) return;
     if (!currentUser) return;
 
-    const devProfile = {
+    const devProfile: UserProfile = {
       id: currentUser.id,
       username: currentUser.username || 'dev',
       fullName: currentUser.fullName || currentUser.user_metadata?.full_name || currentUser.username || 'Dev User',
@@ -338,860 +298,1212 @@ export default function ProfileScreen() {
       pincode: '',
       age: null,
       gender: '',
+      userCode: currentUser.userCode || '',
       createdAt: new Date().toISOString(),
     } as unknown as UserProfile;
 
+    // Set profile and additional demo content so the screen shows all features
     setProfile(devProfile);
     setLoading(false);
     setError(null);
 
+    // Sample posts for the dev profile
     const samplePosts: MyPost[] = [
-      { id: 'p1', mediaUrl: 'https://picsum.photos/600/600?random=1', mediaType: 'image', caption: 'Recent project: mobile app UI', createdAt: new Date().toISOString() } as MyPost,
-      { id: 'p2', mediaUrl: 'https://picsum.photos/600/600?random=2', mediaType: 'image', caption: 'Portfolio sample — branding work', createdAt: new Date().toISOString() } as MyPost,
+      {
+        id: 'p1',
+        mediaUrl: 'https://picsum.photos/600/600?random=1',
+        mediaType: 'image',
+        caption: 'Recent project: mobile app UI',
+        createdAt: new Date().toISOString(),
+      } as MyPost,
+      {
+        id: 'p2',
+        mediaUrl: 'https://picsum.photos/600/600?random=2',
+        mediaType: 'image',
+        caption: 'Portfolio sample — branding work',
+        createdAt: new Date().toISOString(),
+      } as MyPost,
     ];
-    setPosts(samplePosts); setPostsLoading(false); setPostsError(null);
 
+    setPosts(samplePosts);
+    setPostsLoading(false);
+    setPostsError(null);
+
+    // Sample ratings and summary
     const sampleRatings: ProfileRating[] = [
-      { id: 'r1', rating: 5, comment: 'Great work, on time and communication was excellent.', createdAt: new Date().toISOString(), reviewer: { id: 'u2', fullName: 'Client One', avatar: '', username: 'client1' } },
+      {
+        id: 'r1',
+        rating: 5,
+        comment: 'Great work, on time and communication was excellent.',
+        createdAt: new Date().toISOString(),
+        reviewer: { id: 'u2', fullName: 'Client One', avatar: '', username: 'client1' },
+      },
     ];
+
     setRatings(sampleRatings as any);
     setRatingsSummary({ averageRating: 5, totalRatings: 1 });
-    setVerificationStatus('verified'); setVerificationFee(0);
+
+    // Demo verification/badges
+    setVerificationStatus('verified');
+    setVerificationFee(0);
   }, [session?.access_token, currentUser, profile]);
 
   useEffect(() => {
     let isMounted = true;
+
     async function fetchPosts() {
-      if (!session?.access_token) { if (isMounted) setPostsLoading(false); return; }
-      if (session.access_token === 'dev-token') { if (isMounted) setPostsLoading(false); return; }
+      if (!session?.access_token) {
+        if (isMounted) {
+          setPostsLoading(false);
+        }
+        return;
+      }
+
+      if (session.access_token === 'dev-token') {
+        if (isMounted) {
+          setPostsLoading(false);
+        }
+        return;
+      }
+
       try {
         const { data, error: fetchError } = await getMyPosts(session.access_token);
         if (!isMounted) return;
-        if (fetchError) setPostsError(fetchError);
-        else if (data) setPosts(data.posts);
-      } catch { if (isMounted) setPostsError('Failed to load posts'); }
-      finally { if (isMounted) setPostsLoading(false); }
+
+        if (fetchError) {
+          setPostsError(fetchError);
+        } else if (data) {
+          setPosts(data.posts);
+        }
+      } catch {
+        if (isMounted) {
+          setPostsError('Failed to load posts');
+        }
+      } finally {
+        if (isMounted) {
+          setPostsLoading(false);
+        }
+      }
     }
+
     fetchPosts();
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+    };
   }, [session?.access_token]);
 
   useEffect(() => {
     let isMounted = true;
+
     async function fetchVerificationState() {
       if (!session?.access_token) return;
+
       if (session.access_token === 'dev-token') return;
+
       try {
         const [statusResult, feeResult] = await Promise.all([
           getVerificationStatus(session.access_token),
           getVerificationFee(),
         ]);
+
         if (!isMounted) return;
+
         if (statusResult.data) {
           setVerificationStatus(statusResult.data.verificationStatus as VerificationStatus);
           setVerificationFee(statusResult.data.verificationFee || 0);
           setVerificationRequestedAt(statusResult.data.verificationRequestedAt || null);
         }
-        if (feeResult.data) setVerificationFee(feeResult.data.fee || 0);
-      } catch { if (isMounted) setVerificationStatus('none'); }
+
+        if (feeResult.data) {
+          setVerificationFee(feeResult.data.fee || 0);
+        }
+      } catch {
+        if (isMounted) {
+          setVerificationStatus('none');
+        }
+      }
     }
+
     fetchVerificationState();
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+    };
   }, [session?.access_token]);
 
+  // Animate content in when profile is ready
   useEffect(() => {
     if (!loading && profile && !error) {
       Animated.timing(fadeAnim, {
-        toValue: 1, duration: 500, useNativeDriver: true,
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
       }).start();
     }
   }, [loading, profile, error, fadeAnim]);
 
-  useEffect(() => {
-    if (photoPickerTarget !== null) {
-      Animated.spring(sheetAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }).start();
-    } else {
-      sheetAnim.setValue(0);
-    }
-  }, [photoPickerTarget, sheetAnim]);
-
-  const handleOpenEditModal = () => {
-    if (profile) {
-      let selectedCategory = '';
-      let customProfession = '';
-      let expertiseSelections: string[] = [];
-      if (profile.profession) {
-        if (profile.profession === "none") selectedCategory = "none";
-        else if (profile.profession === "freelancer") selectedCategory = "freelancer";
-        else if (profile.profession === "student") selectedCategory = "student";
-        else {
-          let found = false;
-          for (const [cat, subProfs] of Object.entries(SUB_PROFESSIONS)) {
-            if (subProfs.includes(profile.profession)) { selectedCategory = cat; found = true; break; }
+const handleOpenEditModal = () => {
+  if (profile) {
+    // Set selected category and custom profession based on current profession
+    let selectedCategory = '';
+    let customProfession = '';
+    
+    if (profile.profession) {
+      if (profile.profession === "none") selectedCategory = "none";
+      else if (profile.profession === "freelancer") selectedCategory = "freelancer";
+      else if (profile.profession === "student") selectedCategory = "student";
+      else {
+        let found = false;
+        for (const [cat, subProfs] of Object.entries(SUB_PROFESSIONS)) {
+          if (subProfs.includes(profile.profession)) {
+            selectedCategory = cat;
+            found = true;
+            break;
           }
-          if (!found) { selectedCategory = "other"; customProfession = profile.profession; }
+        }
+        if (!found) {
+          selectedCategory = "other";
+          customProfession = profile.profession;
         }
       }
-
-      if (selectedCategory && SUB_PROFESSIONS[selectedCategory]) {
-        expertiseSelections = profile.skills.filter((skill) => SUB_PROFESSIONS[selectedCategory].includes(skill));
-      }
-
-      setEditForm({
-        fullName: profile.fullName, city: profile.city || profile.location || '',
-        pincode: profile.pincode || '', phoneNumber: profile.phoneNumber || '',
-        age: profile.age !== null && profile.age !== undefined ? String(profile.age) : '',
-        gender: profile.gender || '', profession: profile.profession || 'none',
-        skillsText: profile.skills.filter((skill) => !expertiseSelections.includes(skill)).join(', '),
-        expertiseSelections,
-        bio: profile.bio, avatar: profile.avatar,
-        coverPhoto: profile.coverPhotoUrl || '', userGoal: profile.userGoal || '',
-        socialLinks: profile.socialLinks || [], selectedCategory, customProfession,
-      });
-      setEditError(null);
-      setShowEditModal(true);
     }
-  };
+    
+    setEditForm({
+      fullName: profile.fullName,
+      city: profile.city || profile.location || '',
+      pincode: profile.pincode || '',
+      phoneNumber: profile.phoneNumber || '',
+      age: profile.age !== null && profile.age !== undefined ? String(profile.age) : '',
+      gender: profile.gender || '',
+      profession: profile.profession || 'none',
+      skillsText: profile.skills.join(', '),
+      bio: profile.bio,
+      avatar: profile.avatar,
+      coverPhoto: profile.coverPhotoUrl || '',
+      userGoal: profile.userGoal || '',
+      socialLinks: profile.socialLinks || [],
+      selectedCategory,
+      customProfession
+    });
+    setEditError(null);
+    setShowEditModal(true);
+  }
+};
 
   const handleCloseEditModal = () => {
     setShowEditModal(false);
-    setEditForm({ fullName: '', city: '', pincode: '', phoneNumber: '', age: '', gender: '', profession: 'none', skillsText: '', expertiseSelections: [], bio: '', avatar: '', userGoal: '', socialLinks: [], customProfession: '', selectedCategory: '', coverPhoto: '' });
+    setEditForm({
+      fullName: '',
+      city: '',
+      pincode: '',
+      phoneNumber: '',
+      age: '',
+      gender: '',
+      profession: 'none',
+      skillsText: '',
+      bio: '',
+      avatar: '',
+      userGoal: '',
+      socialLinks: [],
+      customProfession: '',
+      selectedCategory: '',
+      coverPhoto: '',
+    });
     setEditError(null);
   };
 
   const handleOpenPostModal = () => {
-    setEditingPostId(null); setPostError(null);
+    setEditingPostId(null);
+    setPostError(null);
     setPostForm({ caption: '', mediaItems: [] });
     setShowPostModal(true);
   };
 
   const handleOpenEditPostModal = (post: MyPost) => {
-    setEditingPostId(post.id); setPostError(null);
-    setPostForm({ caption: post.caption, mediaItems: [{ uri: post.mediaUrl, mimeType: post.mediaType === 'video' ? 'video/mp4' : 'image/jpeg' }] });
+    setEditingPostId(post.id);
+    setPostError(null);
+    setPostForm({
+      caption: post.caption,
+      mediaItems: [{ uri: post.mediaUrl, mimeType: post.mediaType === 'video' ? 'video/mp4' : 'image/jpeg' }],
+    });
     setShowPostModal(true);
   };
 
   const handleClosePostModal = () => {
-    setShowPostModal(false); setEditingPostId(null); setPostError(null);
+    setShowPostModal(false);
+    setEditingPostId(null);
+    setPostError(null);
     setPostForm({ caption: '', mediaItems: [] });
   };
 
-  const handlePickImage = async () => {
-    if (!session?.access_token) { setEditError('No authentication token available.'); return; }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permission.status !== 'granted') { setEditError('Media library permission is required.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [1, 1], quality: 0.7,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      const pickedUri = result.assets[0].uri;
-      setLocalAvatarPreview(pickedUri);
-      setEditForm((prev) => ({ ...prev, avatar: pickedUri }));
-      setPhotoUploading(true); setEditError(null);
-      try {
-        const { data, error: uploadError } = await uploadProfilePhoto(session.access_token, pickedUri);
-        if (uploadError) { setEditError(uploadError); return; }
-        if (data?.user?.avatar) {
-          setEditForm((prev) => ({ ...prev, avatar: data.user.avatar }));
-          setProfile((prev) => (prev ? { ...prev, avatar: data.user.avatar } : prev));
-          setLocalAvatarPreview(null);
-        }
-      } catch { setEditError('Failed to upload profile photo.'); }
-      finally { setPhotoUploading(false); }
-    }
-  };
+    const handlePickImage = async () => {
+      if (!session?.access_token) {
+        setEditError('No authentication token available.');
+        return;
+      }
 
-  const handlePickCoverPhoto = async () => {
-    if (!session?.access_token) { setEditError('No authentication token available.'); return; }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permission.status !== 'granted') { setEditError('Media library permission is required.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [16, 9], quality: 0.7,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      const pickedUri = result.assets[0].uri;
-      setLocalCoverPreview(pickedUri);
-      setEditForm((prev) => ({ ...prev, coverPhoto: pickedUri }));
-      setPhotoUploading(true); setEditError(null);
-      try {
-        const { data, error: uploadError } = await uploadCoverPhoto(session.access_token, pickedUri);
-        if (uploadError) { setEditError(uploadError); return; }
-        if (data?.user?.coverPhotoUrl) {
-          setEditForm((prev) => ({ ...prev, coverPhoto: data.user.coverPhotoUrl || '' }));
-          setProfile((prev) => (prev ? { ...prev, coverPhotoUrl: data.user.coverPhotoUrl } : prev));
-          setLocalCoverPreview(null);
-        }
-      } catch { setEditError('Failed to upload cover photo.'); }
-      finally { setPhotoUploading(false); }
-    }
-  };
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        setEditError('Media library permission is required to upload a profile photo.');
+        return;
+      }
 
-  const handlePhotoPickerOption = async (option: 'camera' | 'gallery' | 'remove') => {
-    if (!photoPickerTarget) return;
-    setPhotoPickerTarget(null);
-    if (option === 'camera') {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (permission.status !== 'granted') { setEditError('Camera permission is required.'); return; }
-      const result = await ImagePicker.launchCameraAsync({
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: photoPickerTarget === 'avatar' ? [1, 1] : [16, 9],
+        aspect: [1, 1],
         quality: 0.7,
       });
+
       if (!result.canceled && result.assets.length > 0) {
         const pickedUri = result.assets[0].uri;
-        if (photoPickerTarget === 'avatar') {
-          setLocalAvatarPreview(pickedUri);
-          setEditForm((prev) => ({ ...prev, avatar: pickedUri }));
-        } else {
-          setLocalCoverPreview(pickedUri);
-          setEditForm((prev) => ({ ...prev, coverPhoto: pickedUri }));
-        }
-        setPhotoUploading(true); setEditError(null);
+        // show immediate preview
+        setLocalAvatarPreview(pickedUri);
+        setEditForm((prev) => ({ ...prev, avatar: pickedUri }));
+
+        setPhotoUploading(true);
+        setEditError(null);
+
         try {
-          const uploadFn = photoPickerTarget === 'avatar' ? uploadProfilePhoto : uploadCoverPhoto;
-          const { data, error: uploadError } = await uploadFn(session!.access_token, pickedUri);
-          if (uploadError) { setEditError(uploadError); return; }
-          if (photoPickerTarget === 'avatar' && data?.user?.avatar) {
+          const { data, error: uploadError } = await uploadProfilePhoto(session.access_token, pickedUri);
+          if (uploadError) {
+            setEditError(uploadError);
+            // keep local preview but do not overwrite
+            return;
+          }
+
+          if (data?.user?.avatar) {
             setEditForm((prev) => ({ ...prev, avatar: data.user.avatar }));
             setProfile((prev) => (prev ? { ...prev, avatar: data.user.avatar } : prev));
             setLocalAvatarPreview(null);
           }
-          if (photoPickerTarget === 'cover' && data?.user?.coverPhotoUrl !== undefined) {
+        } catch {
+          setEditError('Failed to upload profile photo.');
+        } finally {
+          setPhotoUploading(false);
+        }
+      }
+    };
+
+    const handlePickCoverPhoto = async () => {
+      if (!session?.access_token) {
+        setEditError('No authentication token available.');
+        return;
+      }
+
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== 'granted') {
+        setEditError('Media library permission is required to upload a cover photo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        const pickedUri = result.assets[0].uri;
+        setLocalCoverPreview(pickedUri);
+        setEditForm((prev) => ({ ...prev, coverPhoto: pickedUri }));
+
+        setPhotoUploading(true);
+        setEditError(null);
+
+        try {
+          const { data, error: uploadError } = await uploadCoverPhoto(session.access_token, pickedUri);
+          if (uploadError) {
+            setEditError(uploadError);
+            return;
+          }
+
+          if (data?.user?.coverPhotoUrl) {
             setEditForm((prev) => ({ ...prev, coverPhoto: data.user.coverPhotoUrl || '' }));
             setProfile((prev) => (prev ? { ...prev, coverPhotoUrl: data.user.coverPhotoUrl } : prev));
             setLocalCoverPreview(null);
           }
-        } catch { setEditError('Failed to upload photo.'); }
-        finally { setPhotoUploading(false); }
+        } catch {
+          setEditError('Failed to upload cover photo.');
+        } finally {
+          setPhotoUploading(false);
+        }
       }
-    } else if (option === 'gallery') {
-      if (photoPickerTarget === 'avatar') await handlePickImage();
-      else await handlePickCoverPhoto();
-    } else if (option === 'remove') {
-      if (photoPickerTarget === 'avatar') await handleDeleteAvatar();
-      else await handleDeleteCoverPhoto();
-    }
-  };
+    };
 
-  const handleSaveProfile = async () => {
-    if (!session?.access_token || !profile) return;
-    if (!editForm.fullName.trim()) { setEditError('Full name is required'); return; }
-    if (editForm.pincode && !/^\d{4,10}$/.test(editForm.pincode.trim())) { setEditError('Pincode must be 4 to 10 digits.'); return; }
-    if (editForm.phoneNumber && !/^\+?[0-9]{7,15}$/.test(editForm.phoneNumber.trim())) { setEditError('Phone number must be 7 to 15 digits.'); return; }
-    let parsedAge: number | null = null;
-    if (editForm.age.trim()) {
-      parsedAge = Number(editForm.age.trim());
-      if (!Number.isFinite(parsedAge) || parsedAge < 0 || parsedAge > 120) { setEditError('Age must be between 0 and 120.'); return; }
-    }
-    const expertiseSkills = Array.from(new Set(editForm.expertiseSelections.map((skill) => skill.trim()).filter(Boolean)));
-    const freeformSkills = editForm.skillsText.split(',').map((s) => s.trim()).filter(Boolean);
-    const skills = Array.from(new Set([...expertiseSkills, ...freeformSkills]));
-    const socialLinks = editForm.socialLinks.map((link) => ({ platform: String(link.platform || '').trim().toLowerCase(), url: normalizeUrl(link.url) })).filter((link) => link.platform && link.url);
-    let finalProfession = editForm.profession;
-    if (editForm.selectedCategory === "none") finalProfession = "none";
-    else if (editForm.selectedCategory === "freelancer") finalProfession = "freelancer";
-    else if (editForm.selectedCategory === "student") finalProfession = "student";
-    else if (editForm.selectedCategory === "other") finalProfession = "other";
-    else if (PROFESSIONAL_CATEGORIES.includes(editForm.selectedCategory as ProfessionOption)) finalProfession = editForm.selectedCategory;
-    else if (editForm.profession === "other") finalProfession = "other";
-    if (!['tech', 'creative', 'engineering', 'professional', 'freelancer', 'student', 'none', 'other'].includes(finalProfession)) {
-      finalProfession = 'none';
-    }
-    const normalizedGoal = editForm.userGoal === 'OFFER_SERVICE' || editForm.userGoal === 'HIRE_PROFESSIONALS' ? editForm.userGoal : '';
-    setEditLoading(true); setEditError(null);
-    try {
-      const { data, error } = await updateUserProfile(session.access_token, {
-        fullName: editForm.fullName.trim(), location: editForm.city.trim(), city: editForm.city.trim(),
-        pincode: editForm.pincode.trim(), phoneNumber: editForm.phoneNumber.trim(), age: parsedAge,
-        gender: editForm.gender.trim(), profession: finalProfession as any, skills, bio: editForm.bio.trim(),
-        avatar: editForm.avatar, coverPhotoUrl: editForm.coverPhoto || undefined, userGoal: normalizedGoal, socialLinks,
-      });
-      if (error) setEditError(error);
-      else if (data) { setProfile(data.user); handleCloseEditModal(); }
-    } catch { setEditError('Failed to update profile'); }
-    finally { setEditLoading(false); }
-  };
+    const handleSaveProfile = async () => {
+      if (!session?.access_token || !profile) return;
+
+      if (!editForm.fullName.trim()) {
+        setEditError('Full name is required');
+        return;
+      }
+
+      if (editForm.pincode && !/^\d{4,10}$/.test(editForm.pincode.trim())) {
+        setEditError('Pincode must be 4 to 10 digits.');
+        return;
+      }
+
+      if (editForm.phoneNumber && !/^\+?[0-9]{7,15}$/.test(editForm.phoneNumber.trim())) {
+        setEditError('Phone number must be 7 to 15 digits (optional + prefix).');
+        return;
+      }
+
+      let parsedAge: number | null = null;
+      if (editForm.age.trim()) {
+        parsedAge = Number(editForm.age.trim());
+        if (!Number.isFinite(parsedAge) || parsedAge < 0 || parsedAge > 120) {
+          setEditError('Age must be a number between 0 and 120.');
+          return;
+        }
+      }
+
+      const skills = editForm.skillsText
+        .split(',')
+        .map((skill) => skill.trim())
+        .filter(Boolean);
+
+      const socialLinks = editForm.socialLinks
+        .map((link) => ({
+          platform: String(link.platform || '').trim().toLowerCase(),
+          url: normalizeUrl(link.url),
+        }))
+        .filter((link) => link.platform && link.url);
+
+      let finalProfession: string = editForm.profession;
+      if (editForm.selectedCategory === "none") finalProfession = "none";
+      else if (editForm.selectedCategory === "freelancer") finalProfession = "freelancer";
+      else if (editForm.selectedCategory === "student") finalProfession = "student";
+      else if (editForm.selectedCategory === "other") finalProfession = editForm.customProfession || "other";
+      else if (editForm.profession === "other") finalProfession = editForm.customProfession || "other";
+
+      const normalizedGoal = editForm.userGoal === 'OFFER_SERVICE' || editForm.userGoal === 'HIRE_PROFESSIONALS'
+        ? editForm.userGoal
+        : '';
+
+      setEditLoading(true);
+      setEditError(null);
+
+      try {
+        const { data, error } = await updateUserProfile(session.access_token, {
+          fullName: editForm.fullName.trim(),
+          location: editForm.city.trim(),
+          city: editForm.city.trim(),
+          pincode: editForm.pincode.trim(),
+          phoneNumber: editForm.phoneNumber.trim(),
+          age: parsedAge,
+          gender: editForm.gender.trim(),
+          profession: finalProfession as any,
+          skills,
+          bio: editForm.bio.trim(),
+          avatar: editForm.avatar,
+          coverPhotoUrl: editForm.coverPhoto || undefined,
+          userGoal: normalizedGoal,
+          socialLinks,
+        });
+
+        if (error) {
+          setEditError(error);
+        } else if (data) {
+          setProfile(data.user);
+          handleCloseEditModal();
+        }
+      } catch (err) {
+        setEditError('Failed to update profile');
+      } finally {
+        setEditLoading(false);
+      }
+    };
 
   const addSocialLink = () => {
-    setEditForm((prev) => ({ ...prev, socialLinks: [...prev.socialLinks, { platform: 'website', url: '' }] }));
+    setEditForm((prev) => ({
+      ...prev,
+      socialLinks: [...prev.socialLinks, { platform: 'website', url: '' }],
+    }));
   };
 
   const removeSocialLink = (index: number) => {
-    setEditForm((prev) => ({ ...prev, socialLinks: prev.socialLinks.filter((_, i) => i !== index) }));
+    setEditForm((prev) => ({
+      ...prev,
+      socialLinks: prev.socialLinks.filter((_, currentIndex) => currentIndex !== index),
+    }));
   };
 
   const updateSocialLink = (index: number, field: 'platform' | 'url', value: string) => {
-    setEditForm((prev) => ({ ...prev, socialLinks: prev.socialLinks.map((link, i) => i === index ? { ...link, [field]: value } : link) }));
+    setEditForm((prev) => ({
+      ...prev,
+      socialLinks: prev.socialLinks.map((link, currentIndex) =>
+        currentIndex === index ? { ...link, [field]: value } : link
+      ),
+    }));
   };
 
   const handleOpenUrl = async (url: string) => {
     const normalized = normalizeUrl(url);
     if (!normalized) return;
-    try { await Linking.openURL(normalized); } catch { Alert.alert('Unable to open link', normalized); }
+
+    try {
+      await Linking.openURL(normalized);
+    } catch {
+      Alert.alert('Unable to open link', normalized);
+    }
   };
 
   const handleDeleteAvatar = async () => {
     if (!session?.access_token) return;
+
     try {
       const { data, error: deleteError } = await deleteProfilePhoto(session.access_token);
-      if (deleteError) { Alert.alert('Unable to remove profile photo', deleteError); return; }
+      if (deleteError) {
+        Alert.alert('Unable to remove profile photo', deleteError);
+        return;
+      }
+
       if (data?.user?.avatar) {
         setProfile((prev) => (prev ? { ...prev, avatar: data.user.avatar } : prev));
         setEditForm((prev) => ({ ...prev, avatar: data.user.avatar }));
         setLocalAvatarPreview(null);
       }
-    } catch { Alert.alert('Unable to remove profile photo'); }
+    } catch {
+      Alert.alert('Unable to remove profile photo');
+    }
   };
 
   const handleDeleteCoverPhoto = async () => {
     if (!session?.access_token) return;
+
     try {
       const { data, error: deleteError } = await deleteCoverPhoto(session.access_token);
-      if (deleteError) { Alert.alert('Unable to remove cover photo', deleteError); return; }
+      if (deleteError) {
+        Alert.alert('Unable to remove cover photo', deleteError);
+        return;
+      }
+
       if (data?.user?.coverPhotoUrl !== undefined) {
         setProfile((prev) => (prev ? { ...prev, coverPhotoUrl: data.user.coverPhotoUrl } : prev));
         setEditForm((prev) => ({ ...prev, coverPhoto: data.user.coverPhotoUrl || '' }));
         setLocalCoverPreview(null);
       }
-    } catch { Alert.alert('Unable to remove cover photo'); }
+    } catch {
+      Alert.alert('Unable to remove cover photo');
+    }
+  };
+
+  const handleShareProfile = async () => {
+    if (!profile) return;
+
+    const shareMessage = [
+      `${profile.fullName} on Krovaa`,
+      profile.profession && profile.profession !== 'none' ? formatProfessionLabel(profile.profession) : '',
+      profile.city || profile.location || '',
+      profile.userCode ? `Code: ${profile.userCode}` : '',
+    ]
+      .filter(Boolean)
+      .join(' • ');
+
+    try {
+      await Share.share({
+        message: shareMessage || 'Check out this Krovaa profile.',
+      });
+    } catch {
+      // Fallback: copy profile link to clipboard
+      try {
+        const link = `https://krovaa.com/s/${(profile as any).shareId || profile.username}`;
+        await Clipboard.setStringAsync(link);
+        Alert.alert('Link copied', 'Profile link copied to clipboard.');
+      } catch {
+        Alert.alert('Unable to share profile');
+      }
+    }
   };
 
   const handleRequestVerification = async () => {
     if (!session?.access_token) return;
+
     setVerificationBusy(true);
     try {
       const { data, error } = await applyForVerification(session.access_token);
-      if (error) { Alert.alert('Verification request failed', error); return; }
+      if (error) {
+        Alert.alert('Verification request failed', error);
+        return;
+      }
+
       if (data) {
         setVerificationStatus((data.status as VerificationStatus) || 'pending');
         setVerificationFee(data.fee || verificationFee || 0);
         setVerificationRequestedAt(new Date().toISOString());
         Alert.alert('Verification request submitted', data.message || 'Your request is under review.');
       }
-    } catch { Alert.alert('Verification request failed'); }
-    finally { setVerificationBusy(false); }
+    } catch {
+      Alert.alert('Verification request failed');
+    } finally {
+      setVerificationBusy(false);
+    }
   };
 
   const loadRatingEligibility = async () => {
     if (!profile || !session?.access_token) return;
+
     try {
       const { data, error: eligibilityError } = await getRatingEligibility(session.access_token, profile.id);
-      if (eligibilityError) { setCanRateUser(false); setRatingEligibilityReason(eligibilityError); return; }
+      if (eligibilityError) {
+        setCanRateUser(false);
+        setRatingEligibilityReason(eligibilityError);
+        return;
+      }
+
       setCanRateUser(Boolean(data?.canRate));
       setRatingEligibilityReason(data?.reason || '');
-    } catch { setCanRateUser(false); setRatingEligibilityReason('Unable to check eligibility.'); }
+    } catch {
+      setCanRateUser(false);
+      setRatingEligibilityReason('Unable to check rating eligibility right now.');
+    }
   };
 
   const handleSubmitRating = async () => {
     if (!profile || !session?.access_token) return;
-    if (!canRateUser) { Alert.alert('Cannot rate profile', ratingEligibilityReason || 'Not eligible.'); return; }
-    if (!ratingComment.trim()) { Alert.alert('Add a review', 'Please share a short review.'); return; }
+
+    if (!canRateUser) {
+      Alert.alert('Cannot rate profile', ratingEligibilityReason || 'You are not eligible to rate this profile.');
+      return;
+    }
+
+    if (!ratingComment.trim()) {
+      Alert.alert('Add a review', 'Please share a short review before submitting.');
+      return;
+    }
+
     setRatingSubmitting(true);
     try {
       const { data, error: submitError } = await rateUser(session.access_token, profile.id, ratingValue, ratingComment.trim());
-      if (submitError) { Alert.alert('Rating failed', submitError); return; }
+      if (submitError) {
+        Alert.alert('Rating failed', submitError);
+        return;
+      }
+
       if (data) {
         setRatingsSummary(data.summary || ratingsSummary);
-        setShowRatingModal(false); setShowRatingsModal(true);
-        setRatingComment(''); setRatingValue(5);
+        setShowRatingModal(false);
+        setShowRatingsModal(true);
+        setRatingComment('');
+        setRatingValue(5);
         await loadRatings();
       }
-    } catch { Alert.alert('Rating failed', 'Unable to submit your rating.'); }
-    finally { setRatingSubmitting(false); }
+    } catch {
+      Alert.alert('Rating failed', 'Unable to submit your rating.');
+    } finally {
+      setRatingSubmitting(false);
+    }
   };
 
   const loadRatings = async () => {
     if (!profile) return;
+
     setInsightsLoading(true);
     try {
       const { data, error: ratingsError } = await getUserRatings(profile.id);
       if (ratingsError) {
-        setRatings([]); setRatingsSummary({ averageRating: profile.stats.reviews || 0, totalRatings: 0 }); return;
+        setRatings([]);
+        setRatingsSummary({
+          averageRating: profile.stats.reviews || 0,
+          totalRatings: 0,
+        });
+        return;
       }
-      if (data) { setRatings(data.ratings); setRatingsSummary(data.summary); }
-    } catch { setRatings([]); }
-    finally { setInsightsLoading(false); }
+
+      if (data) {
+        setRatings(data.ratings);
+        setRatingsSummary(data.summary);
+      }
+    } catch {
+      setRatings([]);
+    } finally {
+      setInsightsLoading(false);
+    }
   };
 
   const handleMenuPress = (label: string) => {
-    if (label === 'Verification') { setShowVerificationModal(true); return; }
-    if (label === 'Badges & Achievements') { setShowBadgesModal(true); return; }
-    if (label === 'Reviews & Ratings') {
-      setShowAllRatings(false); setShowRatingsModal(true);
-      void loadRatingEligibility(); void loadRatings();
+    if (label === 'Verification') {
+      setShowVerificationModal(true);
+      return;
     }
+
+    if (label === 'Badges & Achievements') {
+      setShowBadgesModal(true);
+      return;
+    }
+
+    if (label === 'My Portfolio') {
+      handleOpenPortfolio();
+      return;
+    }
+
+    if (label === 'Reviews & Ratings') {
+      setShowAllRatings(false);
+      setShowRatingsModal(true);
+      void loadRatingEligibility();
+      void loadRatings();
+    }
+  };
+
+  const handleOpenPortfolio = () => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
   };
 
   const handlePickPostMedia = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permission.status !== 'granted') { setPostError('Media library permission is required.'); return; }
+    if (permission.status !== 'granted') {
+      setPostError('Media library permission is required to upload a post.');
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsMultipleSelection: true, allowsEditing: false, quality: 0.8,
+      allowsMultipleSelection: true,
+      allowsEditing: false,
+      quality: 0.8,
     });
+
     if (!result.canceled && result.assets.length > 0) {
       const mediaItems = result.assets.map((asset) => ({
-        uri: asset.uri, mimeType: asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg'),
+        uri: asset.uri,
+        mimeType: asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg'),
       }));
-      setPostForm((prev) => ({ ...prev, mediaItems }));
+
+      setPostForm((prev) => ({
+        ...prev,
+        mediaItems,
+      }));
       setPostError(null);
     }
   };
 
   const handleUploadPost = async () => {
-    if (!session?.access_token) { setPostError('No authentication token available.'); return; }
-    setPostUploading(true); setPostError(null);
+    if (!session?.access_token) {
+      setPostError('No authentication token available.');
+      return;
+    }
+
+    setPostUploading(true);
+    setPostError(null);
+
     try {
       if (editingPostId) {
-        const { data, error: updateError } = await updateMyPostCaption(session.access_token, editingPostId, postForm.caption.trim());
-        if (updateError) { setPostError(updateError); return; }
-        if (data?.post) { setPosts((prev) => prev.map((p) => (p.id === data.post.id ? data.post : p))); handleClosePostModal(); }
+        const { data, error: updateError } = await updateMyPostCaption(
+          session.access_token,
+          editingPostId,
+          postForm.caption.trim()
+        );
+
+        if (updateError) {
+          setPostError(updateError);
+          return;
+        }
+
+        if (data?.post) {
+          setPosts((prev) => prev.map((post) => (post.id === data.post.id ? data.post : post)));
+          handleClosePostModal();
+        }
       } else {
-        if (postForm.mediaItems.length === 0) { setPostError('Please choose media first.'); return; }
+        if (postForm.mediaItems.length === 0) {
+          setPostError('Please choose one or more photos/videos first.');
+          return;
+        }
+
         const createdPosts: MyPost[] = [];
         for (const mediaItem of postForm.mediaItems) {
-          const { data, error: uploadError } = await createMyPost(session.access_token, mediaItem.uri, mediaItem.mimeType, postForm.caption.trim());
-          if (uploadError) { if (createdPosts.length > 0) setPosts((prev) => [...createdPosts.reverse(), ...prev]); setPostError(uploadError); return; }
-          if (data?.post) createdPosts.push(data.post);
+          const { data, error: uploadError } = await createMyPost(
+            session.access_token,
+            mediaItem.uri,
+            mediaItem.mimeType,
+            postForm.caption.trim()
+          );
+
+          if (uploadError) {
+            if (createdPosts.length > 0) {
+              setPosts((prev) => [...createdPosts.reverse(), ...prev]);
+            }
+            setPostError(uploadError);
+            return;
+          }
+
+          if (data?.post) {
+            createdPosts.push(data.post);
+          }
         }
-        if (createdPosts.length > 0) { setPosts((prev) => [...createdPosts.reverse(), ...prev]); handleClosePostModal(); }
+
+        if (createdPosts.length > 0) {
+          setPosts((prev) => [...createdPosts.reverse(), ...prev]);
+          handleClosePostModal();
+        }
       }
-    } catch { setPostError(editingPostId ? 'Failed to update post.' : 'Failed to upload post.'); }
-    finally { setPostUploading(false); }
+    } catch {
+      setPostError(editingPostId ? 'Failed to update post.' : 'Failed to upload post.');
+    } finally {
+      setPostUploading(false);
+    }
   };
 
   const handleDeletePost = (postId: string) => {
-    if (!session?.access_token) { setPostsError('No authentication token.'); return; }
-    Alert.alert('Delete post', 'Are you sure?', [
+    if (!session?.access_token) {
+      setPostsError('No authentication token available.');
+      return;
+    }
+
+    Alert.alert('Delete post', 'Are you sure you want to delete this post?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        setDeletingPostId(postId); setPostsError(null);
-        try {
-          const { error: deleteError } = await deleteMyPost(session.access_token as string, postId);
-          if (deleteError) { setPostsError(deleteError); return; }
-          setPosts((prev) => prev.filter((p) => p.id !== postId));
-        } catch { setPostsError('Failed to delete post.'); }
-        finally { setDeletingPostId(null); }
-      }},
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingPostId(postId);
+          setPostsError(null);
+
+          try {
+            const { error: deleteError } = await deleteMyPost(session.access_token as string, postId);
+            if (deleteError) {
+              setPostsError(deleteError);
+              return;
+            }
+            setPosts((prev) => prev.filter((post) => post.id !== postId));
+          } catch {
+            setPostsError('Failed to delete post.');
+          } finally {
+            setDeletingPostId(null);
+          }
+        },
+      },
     ]);
   };
 
   const handlePostOptions = (post: MyPost) => {
-    Alert.alert('Post options', 'Choose an action.', [
-      { text: 'Edit caption', onPress: () => handleOpenEditPostModal(post) },
-      { text: 'Delete post', style: 'destructive', onPress: () => handleDeletePost(post.id) },
+    Alert.alert('Post options', 'Choose an action for this post.', [
+      {
+        text: 'Edit caption',
+        onPress: () => handleOpenEditPostModal(post),
+      },
+      {
+        text: 'Delete post',
+        style: 'destructive',
+        onPress: () => handleDeletePost(post.id),
+      },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
 
-  const openMediaViewer = (index: number) => {
-    setMediaViewerIndex(index);
-    setShowMediaViewer(true);
-    mediaViewerAnim.setValue(0);
-    mediaViewerPan.setValue({ x: 0, y: 0 });
-    mediaViewerScale.setValue(0.92);
-    Animated.parallel([
-      Animated.timing(mediaViewerAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.spring(mediaViewerScale, { toValue: 1, friction: 8, tension: 60, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const closeMediaViewer = () => {
-    Animated.parallel([
-      Animated.timing(mediaViewerAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(mediaViewerScale, { toValue: 0.92, duration: 200, useNativeDriver: true }),
-    ]).start(() => {
-      setShowMediaViewer(false);
-    });
-  };
-
-  const goToNextPost = () => {
-    if (mediaViewerIndex < posts.length - 1) {
-      setMediaViewerIndex(mediaViewerIndex + 1);
-    }
-  };
-
-  const goToPrevPost = () => {
-    if (mediaViewerIndex > 0) {
-      setMediaViewerIndex(mediaViewerIndex - 1);
-    }
-  };
-
-  const mediaPanResponder = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10 || Math.abs(gs.dy) > 10,
-    onPanResponderMove: (_, gs) => {
-      if (Math.abs(gs.dx) > Math.abs(gs.dy)) {
-        mediaViewerPan.setValue({ x: gs.dx, y: 0 });
-      } else {
-        mediaViewerPan.setValue({ x: 0, y: gs.dy });
-      }
-    },
-    onPanResponderRelease: (_, gs) => {
-      if (Math.abs(gs.dx) > 80 && Math.abs(gs.dx) > Math.abs(gs.dy)) {
-        if (gs.dx > 0) goToPrevPost();
-        else goToNextPost();
-        Animated.spring(mediaViewerPan, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
-      } else if (Math.abs(gs.dy) > 100 && Math.abs(gs.dy) > Math.abs(gs.dx)) {
-        closeMediaViewer();
-      } else {
-        Animated.spring(mediaViewerPan, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
-      }
-    },
-  })).current;
-
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-          <ProfileSkeleton />
-        </ScrollView>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
 
   if (error || !profile) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: Spacing.xl }]}>
-        <View style={{ alignItems: 'center', gap: 16 }}>
-          <UserCircle size={64} color={Colors.gray300} />
-          <Text style={{ fontSize: FontSizes.md, color: Colors.gray600, textAlign: 'center' }}>{error || 'Unable to load profile'}</Text>
-          {(!session || !session.access_token) && signInDev && (
-            <TouchableOpacity
-              style={{ backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderRadius: BorderRadius.md }}
-              onPress={() => signInDev?.()}
-              activeOpacity={0.8}
-            >
-              <Text style={{ color: Colors.white, fontWeight: FontWeights.semiBold as any }}>Sign in (dev)</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.errorText}>{error || 'Unable to load profile'}</Text>
+        {/* Dev helper: sign in quickly when no session to populate the profile during local development */}
+        {(!session || !session.access_token) && signInDev && (
+          <TouchableOpacity
+            style={styles.devSignInBtn}
+            onPress={() => signInDev?.()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.devSignInText}>Sign in (dev)</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
 
   const STATS = [
-    { label: 'Jobs Done', value: profile.stats.jobsDone.toString(), icon: Briefcase, color: Colors.primary },
-    { label: 'Reviews', value: profile.stats.reviews.toFixed(1), icon: Star, color: '#F59E0B' },
-    { label: 'Earned', value: `₹${(profile.stats.earned / 1000).toFixed(1)}K`, icon: Award, color: Colors.success },
+    { label: 'Jobs Done', value: profile.stats.jobsDone.toString() },
+    { label: 'Reviews', value: profile.stats.reviews.toFixed(1) },
+    { label: 'Earned', value: `₹${(profile.stats.earned / 1000).toFixed(1)}K` },
   ];
-
   const goalLabel = formatGoal(profile.userGoal);
   const isOwnProfile = !!currentUser && !!profile && String(profile.id) === String(currentUser.id);
-  const profileShareUrl = profile ? `https://krovaa.com/s/${(profile as any).shareId || profile.username}` : '';
-  const profileShareTitle = profile
-    ? (profile.profession && profile.profession !== 'none'
-      ? formatProfessionLabel(profile.profession)
-      : profile.bio?.trim().slice(0, 72) || 'Professional profile')
-    : 'Professional profile';
-
   const badgesData = [
-    { title: 'Verified Profile', description: 'Identity and trust verified.', color: Colors.primary, active: verificationStatus === 'verified' },
-    { title: 'Portfolio Builder', description: 'Showcase your work.', color: Colors.secondary, active: posts.length > 0 },
-    { title: 'Goal Set', description: 'Clear service goal.', color: Colors.accent, active: !!goalLabel },
-    { title: 'Community Rated', description: 'Feedback from others.', color: '#F59E0B', active: (ratingsSummary.totalRatings || 0) > 0 },
-    { title: 'Profile Complete', description: 'Details are filled in.', color: '#22C55E', active: !!profile.fullName && !!profile.bio && !!profile.avatar },
-    { title: 'Connected', description: 'Public social links.', color: '#8B5CF6', active: (profile.socialLinks?.length || 0) > 0 },
+    {
+      title: 'Verified Profile',
+      description: 'Complete identity and trust verification.',
+      color: Colors.primary,
+      active: verificationStatus === 'verified',
+    },
+    {
+      title: 'Portfolio Builder',
+      description: 'Showcase your work with shared posts.',
+      color: Colors.secondary,
+      active: posts.length > 0,
+    },
+    {
+      title: 'Goal Set',
+      description: 'Your profile has a clear service goal.',
+      color: Colors.accent,
+      active: !!goalLabel,
+    },
+    {
+      title: 'Community Rated',
+      description: 'Earn feedback from other users.',
+      color: '#F59E0B',
+      active: (ratingsSummary.totalRatings || 0) > 0,
+    },
+    {
+      title: 'Profile Complete',
+      description: 'Basic profile details are filled in.',
+      color: '#22C55E',
+      active: !!profile.fullName && !!profile.bio && !!profile.avatar,
+    },
+    {
+      title: 'Connected',
+      description: 'Share public social links and reachability.',
+      color: '#8B5CF6',
+      active: (profile.socialLinks?.length || 0) > 0,
+    },
   ];
 
   return (
-    <View style={styles.container}>
-      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Spacing.xxl }}>
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }}>
-          {/* Cover */}
-          <View style={[styles.coverWrapper, { height: coverHeight }]}>
-            {(localCoverPreview || profile.coverPhotoUrl) ? (
-              <Image source={{ uri: localCoverPreview || profile.coverPhotoUrl }} style={[styles.coverImage, { height: coverHeight }]} />
+    <ScrollView ref={scrollViewRef} style={styles.container} showsVerticalScrollIndicator={false}>
+      <Animated.View
+        style={{
+          opacity: fadeAnim,
+          transform: [
+            {
+              translateY: fadeAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [18, 0],
+              }),
+            },
+          ],
+        }}
+      >
+        <View style={styles.headerBg}>
+          <View style={[styles.coverSection, { height: coverHeight }] }>
+            {localCoverPreview ? (
+              <Image source={{ uri: localCoverPreview }} style={[styles.coverImage, { height: coverHeight }]} />
+            ) : profile.coverPhotoUrl ? (
+              <Image source={{ uri: profile.coverPhotoUrl }} style={[styles.coverImage, { height: coverHeight }]} />
             ) : (
               <View style={styles.coverPlaceholder}>
-                <ImagePlus size={32} color={Colors.gray400} />
+                <Text style={styles.coverPlaceholderText}>Add a cover photo</Text>
               </View>
             )}
             <View style={styles.coverOverlay} />
             <View style={styles.coverActions}>
-              <ShareProfileAction
-                profileUrl={profileShareUrl}
-                userName={profile.fullName || profile.username || 'User'}
-                userTitle={profileShareTitle}
-              >
-                {({ openShare, isSharing }) => (
-                  <AnimatedPressable onPress={openShare} style={styles.coverActionBtn} disabled={isSharing}>
-                    <Share2 size={16} color={Colors.white} />
-                  </AnimatedPressable>
-                )}
-              </ShareProfileAction>
+              <TouchableOpacity style={styles.coverActionButton} onPress={handleShareProfile} activeOpacity={0.8}>
+                <Share2 size={16} color={Colors.white} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.coverActionButton} onPress={handleOpenEditModal} activeOpacity={0.8}>
+                <Camera size={16} color={Colors.white} />
+              </TouchableOpacity>
             </View>
             {!!goalLabel && (
               <View style={styles.goalBadge}>
-                <Sparkles size={12} color={Colors.primary} />
                 <Text style={styles.goalBadgeText}>{goalLabel}</Text>
               </View>
             )}
           </View>
 
-          {/* Profile Info */}
-          <View style={[styles.profileInfoWrapper, { marginTop: -(avatarSize / 2 + 4) }]}>
-            <View style={styles.avatarOuter}>
+          <View style={[styles.profileSection, { paddingHorizontal: isTablet ? Spacing.xl : Spacing.lg, marginTop: isTablet ? -60 : -46 }]}>
+            <View style={styles.avatarContainer}>
               <Image
-                source={{ uri: localAvatarPreview || profile.avatar || 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200' }}
+                source={{ uri: localAvatarPreview || profile.avatar }}
                 style={[styles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
               />
-              {isOwnProfile && (
-                <TouchableOpacity style={styles.avatarEditBtn} onPress={handleOpenEditModal} activeOpacity={0.8}>
-                  <Edit3 size={14} color={Colors.white} />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity style={styles.avatarEditButton} activeOpacity={0.7} onPress={handleOpenEditModal}>
+                <Edit3 size={14} color={Colors.white} />
+              </TouchableOpacity>
             </View>
 
             <Text style={styles.name}>{profile.fullName}</Text>
-
-            {(profile.city || profile.location) && (
-              <View style={styles.infoRow}>
-                <MapPin size={14} color={Colors.gray400} />
-                <Text style={styles.infoText}>{profile.city || profile.location}</Text>
-              </View>
-            )}
-
+            <View style={styles.locationRow}>
+              <MapPin size={14} color={Colors.gray600} />
+              <Text style={styles.location}>{profile.city || profile.location || 'Not set'}</Text>
+            </View>
             {!!profile.profession && profile.profession !== 'none' && (
-              <View style={styles.professionBadge}>
-                <Briefcase size={12} color={Colors.primary} />
-                <Text style={styles.professionText}>{formatProfessionLabel(profile.profession)}</Text>
-              </View>
+              <Text style={styles.professionText}>{formatProfessionLabel(profile.profession)}</Text>
             )}
+            {!!profile.phoneNumber && <Text style={styles.subInfo}>{profile.phoneNumber}</Text>}
+            <Text style={styles.email}>{profile.email}</Text>
 
-            {!!profile.email && <Text style={styles.email}>{profile.email}</Text>}
+            <View style={styles.headerMetaRow}>
+              {profile.userCode && (
+                <View style={styles.userCodeBadge}>
+                  <Text style={styles.userCodeLabel}>Your Code</Text>
+                  <Text style={styles.userCodeText}>{profile.userCode}</Text>
+                </View>
+              )}
 
-            <View style={styles.metaRow}>
-              <View style={[styles.verificationChip,
-                verificationStatus === 'verified' ? styles.verifiedChip :
-                verificationStatus === 'pending' ? styles.pendingChip : styles.neutralChip
-              ]}>
-                {verificationStatus === 'verified' ? (
-                  <CheckCircle size={12} color="#16A34A" />
-                ) : verificationStatus === 'pending' ? (
-                  <Clock size={12} color="#D97706" />
-                ) : (
-                  <Shield size={12} color={Colors.gray500} />
-                )}
-                <Text style={[styles.verificationText,
-                  verificationStatus === 'verified' ? { color: '#16A34A' } :
-                  verificationStatus === 'pending' ? { color: '#D97706' } : { color: Colors.gray500 }
-                ]}>
-                  {verificationStatus === 'verified' ? 'Verified' :
-                   verificationStatus === 'pending' ? 'Pending' : 'Not verified'}
+              <View
+                style={[
+                  styles.verificationChip,
+                  verificationStatus === 'verified'
+                    ? styles.verificationChipVerified
+                    : verificationStatus === 'pending'
+                      ? styles.verificationChipPending
+                      : styles.verificationChipNeutral,
+                ]}
+              >
+                <Text style={styles.verificationChipText}>
+                  {verificationStatus === 'verified'
+                    ? 'Verified'
+                    : verificationStatus === 'pending'
+                      ? 'Verification pending'
+                      : 'Not verified'}
                 </Text>
               </View>
             </View>
 
             {!!profile.socialLinks?.length && (
-              <View style={styles.socialWrap}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.socialRow}>
+              <View style={styles.socialPreviewWrap}>
+                <Text style={styles.sectionEyebrow}>Connect</Text>
+                <View style={styles.socialPreviewRow}>
                   {profile.socialLinks.map((link) => {
                     const Icon = getSocialIcon(link.platform);
-                    const platformKey = link.platform.toLowerCase();
-                    const iconColor = SOCIAL_COLORS[platformKey] || Colors.primary;
                     return (
                       <TouchableOpacity
                         key={`${link.platform}-${link.url}`}
-                        style={[styles.socialChip, { borderColor: iconColor + '30', backgroundColor: iconColor + '0A' }]}
+                        style={styles.socialPreviewChip}
                         onPress={() => handleOpenUrl(link.url)}
-                        activeOpacity={0.7}
+                        activeOpacity={0.8}
                       >
-                        <Icon size={13} color={iconColor} />
-                        <Text style={[styles.socialChipText, { color: iconColor }]}>{link.platform}</Text>
+                        <Icon size={14} color={Colors.primary} />
+                        <Text style={styles.socialPreviewText} numberOfLines={1}>
+                          {link.platform}
+                        </Text>
+                        <ExternalLink size={12} color={Colors.gray400} />
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
               </View>
             )}
           </View>
+        </View>
 
-          {/* Stats */}
-          <SectionCard style={{ marginTop: Spacing.md }}>
-            <View style={styles.statsRow}>
-              {STATS.map((stat) => (
-                <View key={stat.label} style={styles.statItem}>
-                  <View style={[styles.statIconWrap, { backgroundColor: stat.color + '14' }]}>
-                    <stat.icon size={16} color={stat.color} />
-                  </View>
-                  <Text style={styles.statValue}>{stat.value}</Text>
-                  <Text style={styles.statLabel}>{stat.label}</Text>
-                </View>
-              ))}
-            </View>
-          </SectionCard>
+      {/* Rest of the UI remains the same */}
+      <View style={styles.statsRow}>
+        {STATS.map((stat) => (
+          <View key={stat.label} style={styles.statItem}>
+            <Text style={styles.statValue}>{stat.value}</Text>
+            <Text style={styles.statLabel}>{stat.label}</Text>
+          </View>
+        ))}
+      </View>
+      
+      <View style={styles.postsSection}>
+        <View style={styles.postsHeader}>
+          <Text style={styles.postsTitle}>My Posts</Text>
+          <TouchableOpacity style={styles.addPostButton} onPress={handleOpenPostModal} activeOpacity={0.8}>
+            <Text style={styles.addPostButtonText}>Upload</Text>
+          </TouchableOpacity>
+        </View>
 
-          {/* Menu */}
-          <SectionCard style={{ marginTop: 12 }}>
-            {MENU_ITEMS.map((item, idx) => (
-              <React.Fragment key={item.label}>
-                <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => handleMenuPress(item.label)}>
-                  <View style={[styles.menuIconWrap, { backgroundColor: item.color + '12' }]}>
-                    <item.icon size={20} color={item.color} />
-                  </View>
-                  <View style={styles.menuContent}>
-                    <Text style={styles.menuLabel}>{item.label}</Text>
-                    <Text style={styles.menuDesc}>{item.desc}</Text>
-                  </View>
-                  <ChevronRight size={18} color={Colors.gray300} />
-                </TouchableOpacity>
-                {idx < MENU_ITEMS.length - 1 && <View style={styles.menuDivider} />}
-              </React.Fragment>
-            ))}
-          </SectionCard>
+        {postsLoading && (
+          <View style={styles.postsStateWrap}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
 
-          {/* Bio */}
-          {!!profile.bio && (
-            <SectionCard style={{ marginTop: 12 }}>
-              <SectionTitle title="About" />
-              <Text style={styles.bioText}>{profile.bio}</Text>
-            </SectionCard>
-          )}
+        {!postsLoading && !!postsError && (
+          <Text style={styles.postsErrorText}>{postsError}</Text>
+        )}
 
-          {/* Skills */}
-          <SectionCard style={{ marginTop: 12 }}>
-            <SectionTitle title="Skills" />
-            {profile.skills.length > 0 ? (
-              <View style={styles.skillsRow}>
-                {profile.skills.map((skill) => (
-                  <View key={skill} style={styles.skillChip}>
-                    <Text style={styles.skillText}>{skill}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.emptyText}>No skills added yet.</Text>
-            )}
-          </SectionCard>
+        {!postsLoading && !postsError && posts.length === 0 && (
+          <Text style={styles.postsEmptyText}>No posts yet. Share your previous works and achievements.</Text>
+        )}
 
-          {/* Profile Info Cards (own profile only) */}
-          {isOwnProfile && (
-            <SectionCard style={{ marginTop: 12 }}>
-              <SectionTitle title="Profile Information" />
-              <View style={styles.infoGrid}>
-                <View style={styles.infoCard}>
-                  <View style={[styles.infoCardAccent, { backgroundColor: '#22C55E' }]} />
-                  <Text style={styles.infoCardLabel}>Personal Details</Text>
-                  <View style={styles.infoRow}>
-                    <View style={styles.infoCell}>
-                      <Calendar size={12} color={Colors.gray400} />
-                      <Text style={styles.infoKey}>Age</Text>
-                      <Text style={styles.infoValue}>{profile.age ?? '—'}</Text>
-                    </View>
-                    <View style={styles.infoCell}>
-                      <User size={12} color={Colors.gray400} />
-                      <Text style={styles.infoKey}>Gender</Text>
-                      <Text style={styles.infoValue}>{profile.gender || '—'}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.infoDivider} />
-                  <View>
-                    <Text style={styles.infoKey}>Location</Text>
-                    <View style={[styles.infoRow, { marginTop: 4 }]}>
-                      <MapPinned size={13} color={Colors.gray400} />
-                      <Text style={styles.infoValue}>
-                        {profile.city || profile.location || 'Not set'}
-                        {profile.pincode ? ` (${profile.pincode})` : ''}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.infoCard}>
-                  <View style={[styles.infoCardAccent, { backgroundColor: Colors.primary }]} />
-                  <Text style={styles.infoCardLabel}>Identity & Contact</Text>
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoKey}>Username</Text>
-                    <Text style={styles.infoValue}>@{profile.username}</Text>
-                  </View>
-                  {!!profile.phoneNumber && (
-                    <View style={styles.infoItem}>
-                      <Phone size={12} color={Colors.gray400} />
-                      <Text style={styles.infoKey}>Phone</Text>
-                      <Text style={[styles.infoValue, { color: Colors.primary }]}>{profile.phoneNumber}</Text>
-                    </View>
-                  )}
-                  <View style={styles.infoItem}>
-                    <Mail size={12} color={Colors.gray400} />
-                    <Text style={styles.infoKey}>Email</Text>
-                    <Text style={styles.infoValue}>{profile.email}</Text>
-                  </View>
-                </View>
-              </View>
-            </SectionCard>
-          )}
-
-          {/* Posts */}
-          <SectionCard style={{ marginTop: 12 }}>
-            <SectionTitle
-              title="Posts"
-              action={
-                <TouchableOpacity style={styles.uploadBtn} onPress={handleOpenPostModal} activeOpacity={0.7}>
-                  <Plus size={16} color={Colors.white} />
-                  <Text style={styles.uploadBtnText}>Upload</Text>
-                </TouchableOpacity>
-              }
-            />
-
-            {postsLoading && (
-              <View style={{ paddingVertical: Spacing.lg, alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={Colors.primary} />
-              </View>
-            )}
-
-            {!postsLoading && !!postsError && (
-              <Text style={{ color: Colors.error, fontSize: FontSizes.sm }}>{postsError}</Text>
-            )}
-
-            {!postsLoading && !postsError && posts.length === 0 && (
-              <Text style={styles.emptyText}>No posts yet. Share your work.</Text>
-            )}
-
-            {!postsLoading && !postsError && posts.length > 0 && (
-              <View style={styles.postsGrid}>
-                {posts.map((post, idx) => (
-                  <TouchableOpacity
-                    key={post.id}
-                    style={[styles.postCard, { width: POST_ITEM_WIDTH }]}
-                    activeOpacity={0.95}
-                    onPress={() => openMediaViewer(idx)}
-                    onLongPress={() => handlePostOptions(post)}
-                  >
-                    {post.mediaType === 'image' ? (
-                      <Image source={{ uri: post.mediaUrl }} style={styles.postMedia} />
+        {!postsLoading && !postsError && posts.length > 0 && (
+          <View style={styles.postsGrid}>
+            {posts.map((post) => (
+              <TouchableOpacity
+                key={post.id}
+                style={[styles.postCard, { width: isTablet ? '31%' : '47%' }]}
+                activeOpacity={0.95}
+                onLongPress={() => handlePostOptions(post)}
+              >
+                {post.mediaType === 'image' ? (
+                  <Image source={{ uri: post.mediaUrl }} style={styles.postImage} />
+                ) : (
+                  <Video
+                    source={{ uri: post.mediaUrl }}
+                    style={styles.postVideoPlayer}
+                    resizeMode={ResizeMode.COVER}
+                    useNativeControls
+                    isLooping
+                  />
+                )}
+                {isOwnProfile && (
+                  <View style={styles.postActionsRow}>
+                    {deletingPostId === post.id ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
                     ) : (
-                      <View style={styles.postMediaVideo}>
-                        <Video
-                          source={{ uri: post.mediaUrl }}
-                          style={styles.postMedia}
-                          resizeMode={ResizeMode.COVER}
-                          isLooping
-                          shouldPlay={false}
-                        />
-                        <View style={styles.videoPlayIcon}>
-                          <VideoIcon size={20} color={Colors.white} fill={Colors.white} />
-                        </View>
-                      </View>
+                      <>
+                        <TouchableOpacity style={styles.postActionBtn} onPress={() => handleOpenEditPostModal(post)}>
+                          <Text style={styles.postActionText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.postActionBtn, { marginLeft: 8 }]} onPress={() => handleDeletePost(post.id)}>
+                          <Text style={[styles.postActionText, { color: Colors.error }]}>Delete</Text>
+                        </TouchableOpacity>
+                      </>
                     )}
-                  </TouchableOpacity>
-                ))}
+                  </View>
+                )}
+                {!!post.caption && <Text style={styles.postCaption} numberOfLines={2}>{post.caption}</Text>}
+                <Text style={styles.postDateText}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.menuSection}>
+        {MENU_ITEMS.map((item) => (
+          <TouchableOpacity key={item.label} style={styles.menuItem} activeOpacity={0.75} onPress={() => handleMenuPress(item.label)}>
+            <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}>
+              <item.icon size={20} color={item.color} />
+            </View>
+            <Text style={styles.menuLabel}>{item.label}</Text>
+            <ChevronRight size={18} color={Colors.gray400} />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.bioSection}>
+        <Text style={styles.bioTitle}>About</Text>
+        <Text style={styles.bioText}>
+          {profile.bio}
+        </Text>
+      </View>
+
+      <View style={styles.skillsSection}>
+        <Text style={styles.skillsTitle}>Skills</Text>
+        <View style={styles.skillsRow}>
+          {profile.skills.length > 0 ? profile.skills.map((skill) => (
+            <View key={skill} style={styles.skillChip}>
+              <Text style={styles.skillText}>{skill}</Text>
+            </View>
+          )) : <Text style={styles.emptySkillsText}>No skills added yet.</Text>}
+        </View>
+      </View>
+
+      {isOwnProfile && !isEditing && (
+        <View style={styles.profileInfoSection}>
+          <Text style={styles.profileInfoSectionLabel}>Profile Information</Text>
+
+          <View style={styles.profileInfoGrid}>
+            <View style={styles.profileInfoCard}>
+              <View style={styles.profileInfoCardHeader}>
+                <View style={[styles.profileInfoAccent, { backgroundColor: '#22C55E' }]} />
+                <Text style={styles.profileInfoCardLabel}>Personal Details</Text>
               </View>
-            )}
-          </SectionCard>
-        </Animated.View>
-      </ScrollView>
+
+              <View style={styles.profileInfoRow}>
+                <View style={styles.profileInfoCell}>
+                  <Text style={styles.profileInfoKey}>Age</Text>
+                  <Text style={styles.profileInfoValue}>{profile.age ?? '—'}</Text>
+                </View>
+                <View style={styles.profileInfoCell}>
+                  <Text style={styles.profileInfoKey}>Gender</Text>
+                  <Text style={styles.profileInfoValue}>{profile.gender || '—'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.profileInfoDivider} />
+
+              <View>
+                <Text style={styles.profileInfoKey}>Location</Text>
+                <View style={styles.locationRow}>
+                  <MapPin size={13} color={Colors.gray500} />
+                  <Text style={styles.profileInfoValue}>
+                    {profile.city || profile.location || 'Not set'}
+                    {profile.pincode ? ` (${profile.pincode})` : ''}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.profileInfoCard}>
+              <View style={styles.profileInfoCardHeader}>
+                <View style={[styles.profileInfoAccent, { backgroundColor: Colors.primary }]} />
+                <Text style={styles.profileInfoCardLabel}>Identity & Contact</Text>
+              </View>
+
+              <View style={styles.profileInfoItem}>
+                <Text style={styles.profileInfoKey}>Username</Text>
+                <View style={styles.profileInfoInlineRow}>
+                  <Text style={styles.profileInfoValue}>@{profile.username}</Text>
+                  <View style={styles.profileInfoPill}>
+                    <Text style={styles.profileInfoPillText}>Verified</Text>
+                  </View>
+                </View>
+              </View>
+
+              {!!profile.phoneNumber && (
+                <View style={styles.profileInfoItem}>
+                  <Text style={styles.profileInfoKey}>Phone</Text>
+                  <Text style={styles.profileInfoValueEmphasis}>{profile.phoneNumber}</Text>
+                </View>
+              )}
+
+              <View style={styles.profileInfoItem}>
+                <Text style={styles.profileInfoKey}>Email</Text>
+                <Text style={styles.profileInfoValue}>{profile.email}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+{/* 
+      <View style={styles.postsSection}>
+        <View style={styles.postsHeader}>
+          <Text style={styles.postsTitle}>My Posts</Text>
+          <TouchableOpacity style={styles.addPostButton} onPress={handleOpenPostModal} activeOpacity={0.8}>
+            <Text style={styles.addPostButtonText}>Upload</Text>
+          </TouchableOpacity>
+        </View>
+
+        {postsLoading && (
+          <View style={styles.postsStateWrap}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        )}
+
+        {!postsLoading && !!postsError && (
+          <Text style={styles.postsErrorText}>{postsError}</Text>
+        )}
+
+        {!postsLoading && !postsError && posts.length === 0 && (
+          <Text style={styles.postsEmptyText}>No posts yet. Share your previous works and achievements.</Text>
+        )}
+
+        {!postsLoading && !postsError && posts.length > 0 && (
+          <View style={styles.postsGrid}>
+            {posts.map((post) => (
+              <View key={post.id} style={styles.postCard}>
+                {post.mediaType === 'image' ? (
+                  <Image source={{ uri: post.mediaUrl }} style={styles.postImage} />
+                ) : (
+                  <View style={styles.postVideoPlaceholder}>
+                    <Video size={22} color={Colors.white} />
+                    <Text style={styles.postVideoText}>Video</Text>
+                  </View>
+                )}
+                {!!post.caption && <Text style={styles.postCaption} numberOfLines={2}>{post.caption}</Text>}
+                <Text style={styles.postDateText}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View> */}
 
       {/* Edit Profile Modal */}
       <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={handleCloseEditModal}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Profile</Text>
               <TouchableOpacity onPress={handleCloseEditModal} activeOpacity={0.7}>
@@ -1201,330 +1513,394 @@ export default function ProfileScreen() {
 
             {editError && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{editError}</Text>
+                <Text style={styles.errorBoxText}>{editError}</Text>
               </View>
             )}
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              <View style={styles.editCoverWrap}>
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => setPhotoPickerTarget('cover')}
-                  style={styles.editCoverTouch}
-                >
-                  {editForm.coverPhoto || profile?.coverPhotoUrl ? (
-                    <Image
-                      source={{ uri: editForm.coverPhoto || profile?.coverPhotoUrl || '' }}
-                      style={styles.editCoverImg}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.editCoverPlaceholder}>
-                      <Camera size={28} color={Colors.gray300} />
-                    </View>
-                  )}
-                  <View style={styles.editCoverOverlay}>
-                    <Camera size={18} color={Colors.white} />
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => setPhotoPickerTarget('avatar')}
-                  style={styles.editAvatarWrap}
-                >
-                  <Image
-                    source={{ uri: editForm.avatar || profile?.avatar || 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200' }}
-                    style={styles.editAvatarImg}
-                  />
-                  <View style={styles.editAvatarOverlay}>
-                    <Camera size={14} color={Colors.white} />
-                  </View>
-                </TouchableOpacity>
+            <ScrollView style={styles.formContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.photoSection}>
+            <Image source={{ uri: editForm.avatar || profile.avatar }} style={styles.modalAvatar} />
+            <Button title="Upload Photo" onPress={handlePickImage} loading={photoUploading} />
+            <TouchableOpacity onPress={handleDeleteAvatar} activeOpacity={0.75}>
+              <Text style={styles.inlineActionText}>Remove Photo</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.photoSection}>
+            {editForm.coverPhoto ? (
+              <Image source={{ uri: editForm.coverPhoto }} style={{ width: '100%', height: 150, borderRadius: BorderRadius.md }} />
+            ) : (
+              <View style={{ width: '100%', height: 150, backgroundColor: Colors.gray200, borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center' }}>
+                <Text style={{ color: Colors.gray500, fontSize: FontSizes.sm }}>Cover Photo</Text>
+              </View>
+            )}
+            <Button title="Upload Cover Photo" onPress={handlePickCoverPhoto} loading={photoUploading} />
+            <TouchableOpacity onPress={handleDeleteCoverPhoto} activeOpacity={0.75}>
+              <Text style={styles.inlineActionText}>Remove Cover</Text>
+            </TouchableOpacity>
+          </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Full Name</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter your full name"
+                  value={editForm.fullName}
+                  onChangeText={(text) => setEditForm({ ...editForm, fullName: text })}
+                  placeholderTextColor={Colors.gray400}
+                />
               </View>
 
-              <View style={styles.formSection}>
-                <Text style={styles.formSectionTitle}>Basic Information</Text>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>City</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter your city"
+                  value={editForm.city}
+                  onChangeText={(text) => setEditForm({ ...editForm, city: text })}
+                  placeholderTextColor={Colors.gray400}
+                />
+              </View>
 
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Full Name</Text>
-                  <TextInput style={styles.formInput} placeholder="Enter your full name" value={editForm.fullName} onChangeText={(t) => setEditForm({ ...editForm, fullName: t })} placeholderTextColor={Colors.gray400} />
-                </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Pincode</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter pincode"
+                  value={editForm.pincode}
+                  onChangeText={(text) => setEditForm({ ...editForm, pincode: text })}
+                  placeholderTextColor={Colors.gray400}
+                  keyboardType="number-pad"
+                />
+              </View>
 
-                <View style={styles.formRow}>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={styles.formLabel}>City</Text>
-                    <TextInput style={styles.formInput} placeholder="City" value={editForm.city} onChangeText={(t) => setEditForm({ ...editForm, city: t })} placeholderTextColor={Colors.gray400} />
-                  </View>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={styles.formLabel}>Age</Text>
-                    <TextInput style={styles.formInput} placeholder="Age" value={editForm.age} onChangeText={(t) => setEditForm({ ...editForm, age: t })} placeholderTextColor={Colors.gray400} keyboardType="number-pad" />
-                  </View>
-                </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Phone Number</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter phone number"
+                  value={editForm.phoneNumber}
+                  onChangeText={(text) => setEditForm({ ...editForm, phoneNumber: text })}
+                  placeholderTextColor={Colors.gray400}
+                  keyboardType="phone-pad"
+                />
+              </View>
 
-                <View style={styles.formRow}>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={styles.formLabel}>Phone</Text>
-                    <TextInput style={styles.formInput} placeholder="Phone number" value={editForm.phoneNumber} onChangeText={(t) => setEditForm({ ...editForm, phoneNumber: t })} placeholderTextColor={Colors.gray400} keyboardType="phone-pad" />
-                  </View>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={styles.formLabel}>Pincode</Text>
-                    <TextInput style={styles.formInput} placeholder="Pincode" value={editForm.pincode} onChangeText={(t) => setEditForm({ ...editForm, pincode: t })} placeholderTextColor={Colors.gray400} keyboardType="number-pad" />
-                  </View>
-                </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Age</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter age"
+                  value={editForm.age}
+                  onChangeText={(text) => setEditForm({ ...editForm, age: text })}
+                  placeholderTextColor={Colors.gray400}
+                  keyboardType="number-pad"
+                />
+              </View>
 
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Gender</Text>
-                  <View style={styles.chipWrap}>
-                    {GENDER_OPTIONS.map((option) => {
-                      const selected = editForm.gender.toLowerCase() === option.toLowerCase();
-                      return (
-                        <TouchableOpacity key={option} style={[styles.chip, selected && styles.chipActive]} onPress={() => setEditForm({ ...editForm, gender: option })} activeOpacity={0.7}>
-                          <Text style={[styles.chipText, selected && styles.chipTextActive]}>{option}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Profession</Text>
-                  <View style={styles.chipWrap}>
-                    {CATEGORIES.map((cat) => (
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Gender</Text>
+                <View style={styles.optionWrap}>
+                  {GENDER_OPTIONS.map((option) => {
+                    const selected = editForm.gender.toLowerCase() === option.toLowerCase();
+                    return (
                       <TouchableOpacity
-                        key={cat.id}
-                        style={[styles.chip, editForm.selectedCategory === cat.id && styles.chipActive]}
-                        onPress={() => setEditForm((prev) => ({
-                          ...prev,
-                          selectedCategory: cat.id,
-                          profession: cat.id,
-                          customProfession: '',
-                          expertiseSelections: [],
-                        }))}
-                        activeOpacity={0.7}
+                        key={option}
+                        style={[styles.optionChip, selected && styles.optionChipSelected]}
+                        onPress={() => setEditForm({ ...editForm, gender: option })}
+                        activeOpacity={0.75}
                       >
-                        <cat.icon size={14} color={editForm.selectedCategory === cat.id ? Colors.primary : Colors.gray600} />
-                        <Text style={[styles.chipText, editForm.selectedCategory === cat.id && styles.chipTextActive]}>{cat.label}</Text>
+                        <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>{option}</Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  {editForm.selectedCategory && SUB_PROFESSIONS[editForm.selectedCategory] && (
-                    <View style={{ marginTop: 12 }}>
-                      <Text style={styles.formLabel}>Expertise</Text>
-                      <Text style={styles.helperText}>Select one or more.</Text>
-                      <View style={styles.chipWrap}>
-                        {SUB_PROFESSIONS[editForm.selectedCategory].map((prof) => (
-                          <TouchableOpacity
-                            key={prof}
-                            style={[styles.chip, editForm.expertiseSelections.includes(prof) && styles.chipActive]}
-                            onPress={() => setEditForm((prev) => {
-                              const isSelected = prev.expertiseSelections.includes(prof);
-                              return {
-                                ...prev,
-                                expertiseSelections: isSelected
-                                  ? prev.expertiseSelections.filter((item) => item !== prof)
-                                  : [...prev.expertiseSelections, prof],
-                              };
-                            })}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={[styles.chipText, editForm.expertiseSelections.includes(prof) && styles.chipTextActive]}>{prof}</Text>
-                          </TouchableOpacity>
-                        ))}
-                        <TouchableOpacity style={[styles.chip, editForm.profession === 'other' && styles.chipActive]} onPress={() => setEditForm((prev) => ({ ...prev, profession: 'other', customProfession: '' }))} activeOpacity={0.7}>
-                          <Text style={[styles.chipText, editForm.profession === 'other' && styles.chipTextActive]}>Other...</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-
-                  {(editForm.selectedCategory === 'other' || editForm.profession === 'other') && (
-                    <View style={{ marginTop: 12 }}>
-                      <Text style={styles.formLabel}>Specify Profession</Text>
-                      <TextInput style={styles.formInput} placeholder="E.g. Full Stack Engineer" value={editForm.customProfession} onChangeText={(t) => setEditForm((prev) => ({ ...prev, customProfession: t, profession: t ? 'other' : 'none' }))} />
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Skills</Text>
-                  <TextInput style={styles.formInput} placeholder="e.g. React Native, Figma, Java (comma separated)" value={editForm.skillsText} onChangeText={(t) => setEditForm({ ...editForm, skillsText: t })} placeholderTextColor={Colors.gray400} />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Bio</Text>
-                  <TextInput style={[styles.formInput, styles.bioInput]} placeholder="Tell us about yourself" value={editForm.bio} onChangeText={(t) => setEditForm({ ...editForm, bio: t })} placeholderTextColor={Colors.gray400} multiline numberOfLines={4} />
+                    );
+                  })}
                 </View>
               </View>
 
-              <View style={styles.formSection}>
-                <Text style={styles.formSectionTitle}>Goal & Social</Text>
+               <View style={styles.formGroup}>
+                 <Text style={styles.formLabel}>Profession</Text>
+                 
+                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                   {CATEGORIES.map((cat) => (
+                     <TouchableOpacity
+                       key={cat.id}
+                       activeOpacity={0.7}
+                       onPress={() => {
+                         setEditForm(prev => ({
+                           ...prev,
+                           selectedCategory: cat.id,
+                           profession: 'none',
+                           customProfession: ''
+                         }));
+                       }}
+                       style={[
+                         styles.optionChip,
+                         editForm.selectedCategory === cat.id && styles.optionChipSelected
+                       ]}
+                     >
+                       <View style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+                         <cat.icon size={16} color={cat.color.replace('text-', '').replace('-400', '600')} />
+                         <Text style={{ fontSize: FontSizes.xs, fontWeight: FontWeights.medium, color: editForm.selectedCategory === cat.id ? '#1C1C1C' : Colors.gray700 }}>
+                           {cat.label}
+                         </Text>
+                       </View>
+                     </TouchableOpacity>
+                   ))}
+                 </View>
+                 
+                 {editForm.selectedCategory && SUB_PROFESSIONS[editForm.selectedCategory] && (
+                   <View style={{ marginVertical: 8 }}>
+                     <Text style={{ fontSize: FontSizes.sm, fontWeight: FontWeights.semiBold, color: Colors.gray700, marginBottom: 4 }}>
+                       Select Expertise
+                     </Text>
+                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                       {SUB_PROFESSIONS[editForm.selectedCategory].map((prof) => (
+                         <TouchableOpacity
+                           key={prof}
+                           activeOpacity={0.7}
+                           onPress={() => setEditForm(prev => ({
+                             ...prev,
+                             profession: prof,
+                             customProfession: ''
+                           }))}
+                           style={[
+                             styles.optionChip,
+                             editForm.profession === prof && styles.optionChipSelected
+                           ]}
+                         >
+                           <Text style={{ fontSize: FontSizes.xs, fontWeight: FontWeights.medium, color: editForm.profession === prof ? Colors.primary : Colors.gray700 }}>
+                             {prof}
+                           </Text>
+                         </TouchableOpacity>
+                       ))}
+                       <TouchableOpacity
+                         activeOpacity={0.7}
+                         onPress={() => setEditForm(prev => ({
+                           ...prev,
+                           profession: 'other',
+                           customProfession: ''
+                         }))}
+                         style={[
+                           styles.optionChip,
+                           editForm.profession === 'other' && styles.optionChipSelected
+                         ]}
+                       >
+                         <Text style={{ fontSize: FontSizes.xs, fontWeight: FontWeights.medium, color: editForm.profession === 'other' ? Colors.primary : Colors.gray700 }}>
+                           Other...
+                         </Text>
+                       </TouchableOpacity>
+                     </View>
+                    </View>
+                   )}
+                 
+                 {(editForm.selectedCategory === 'other' || editForm.profession === 'other') && (
+                   <View style={{ marginTop: 8 }}>
+                     <Text style={{ fontSize: FontSizes.sm, fontWeight: FontWeights.semiBold, color: Colors.gray700, marginBottom: 4 }}>
+                       Specify Profession
+                     </Text>
+                     <TextInput
+                       style={styles.formInput}
+                       placeholder="E.g. Full Stack Engineer, UX Specialist..."
+                       value={editForm.customProfession}
+                       onChangeText={(text) => setEditForm(prev => ({
+                         ...prev,
+                         customProfession: text,
+                         profession: text ? 'other' : 'none'
+                       }))}
+                     />
+                   </View>
+                 )}
+               </View>
 
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>I am here to...</Text>
-                  <View style={styles.chipWrap}>
-                    {[
-                      { value: 'OFFER_SERVICE', label: 'Offer services' },
-                      { value: 'HIRE_PROFESSIONALS', label: 'Hire professionals' },
-                    ].map((option) => {
-                      const selected = editForm.userGoal === option.value;
-                      return (
-                        <TouchableOpacity key={option.value} style={[styles.chip, selected && styles.chipActive]} onPress={() => setEditForm((prev) => ({ ...prev, userGoal: option.value }))} activeOpacity={0.7}>
-                          <Text style={[styles.chipText, selected && styles.chipTextActive]}>{option.label}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Skills</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g. React Native, Figma, Java"
+                  value={editForm.skillsText}
+                  onChangeText={(text) => setEditForm({ ...editForm, skillsText: text })}
+                  placeholderTextColor={Colors.gray400}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Bio</Text>
+                <TextInput
+                  style={[styles.formInput, styles.bioInput]}
+                  placeholder="Tell us about yourself"
+                  value={editForm.bio}
+                  onChangeText={(text) => setEditForm({ ...editForm, bio: text })}
+                  placeholderTextColor={Colors.gray400}
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>I am here to...</Text>
+                <View style={styles.optionWrap}>
+                  {[
+                    { value: 'OFFER_SERVICE', label: 'Offer services' },
+                    { value: 'HIRE_PROFESSIONALS', label: 'Hire professionals' },
+                  ].map((option) => {
+                    const selected = editForm.userGoal === option.value;
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.optionChip, selected && styles.optionChipSelected]}
+                        onPress={() => setEditForm((prev) => ({ ...prev, userGoal: option.value }))}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.formLabel}>Social Links</Text>
+                  <TouchableOpacity onPress={addSocialLink} activeOpacity={0.75}>
+                    <Text style={styles.inlineActionText}>+ Add</Text>
+                  </TouchableOpacity>
                 </View>
 
-                <View style={styles.formGroup}>
-                  <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.formLabel}>Social Links</Text>
-                    <TouchableOpacity onPress={addSocialLink} activeOpacity={0.7}>
-                      <Text style={{ color: Colors.primary, fontSize: FontSizes.sm, fontWeight: FontWeights.semiBold as any }}>+ Add</Text>
+                {editForm.socialLinks.length === 0 && (
+                  <Text style={styles.helperText}>Add your Facebook, LinkedIn, Instagram, GitHub, website, or other public link.</Text>
+                )}
+
+                {editForm.socialLinks.map((link, index) => (
+                  <View key={`${link.platform}-${index}`} style={styles.socialLinkEditor}>
+                    <View style={styles.optionWrap}>
+                      {SOCIAL_PLATFORM_OPTIONS.map((option) => {
+                        const selected = link.platform === option.value;
+                        return (
+                          <TouchableOpacity
+                            key={option.value}
+                            style={[styles.optionChip, styles.platformChip, selected && styles.optionChipSelected]}
+                            onPress={() => updateSocialLink(index, 'platform', option.value)}
+                            activeOpacity={0.75}
+                          >
+                            <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>{option.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <TextInput
+                      style={styles.formInput}
+                      placeholder="Paste profile URL"
+                      value={link.url}
+                      onChangeText={(text) => updateSocialLink(index, 'url', text)}
+                      placeholderTextColor={Colors.gray400}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+
+                    <TouchableOpacity
+                      style={styles.removeSocialLinkButton}
+                      onPress={() => removeSocialLink(index)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.removeSocialLinkText}>Remove link</Text>
                     </TouchableOpacity>
                   </View>
-
-                  {editForm.socialLinks.length === 0 && (
-                    <Text style={styles.helperText}>Add your social media links.</Text>
-                  )}
-
-                  {editForm.socialLinks.map((link, index) => (
-                    <View key={`${link.platform}-${index}`} style={styles.socialEditor}>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                        <View style={styles.chipWrap}>
-                          {SOCIAL_PLATFORM_OPTIONS.map((option) => {
-                            const selected = link.platform === option.value;
-                            return (
-                              <TouchableOpacity key={option.value} style={[styles.platformChip, selected && styles.chipActive]} onPress={() => updateSocialLink(index, 'platform', option.value)} activeOpacity={0.7}>
-                                <option.icon size={14} color={selected ? Colors.primary : Colors.gray600} />
-                                <Text style={[styles.chipText, selected && styles.chipTextActive]}>{option.label}</Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      </ScrollView>
-                      <TextInput style={styles.formInput} placeholder="Paste profile URL" value={link.url} onChangeText={(t) => updateSocialLink(index, 'url', t)} placeholderTextColor={Colors.gray400} autoCapitalize="none" autoCorrect={false} />
-                      <TouchableOpacity onPress={() => removeSocialLink(index)} activeOpacity={0.7} style={{ alignSelf: 'flex-start', marginTop: 4 }}>
-                        <Text style={{ color: Colors.error, fontSize: FontSizes.xs, fontWeight: FontWeights.semiBold as any }}>Remove link</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
+                ))}
               </View>
 
               <View style={styles.formActions}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={handleCloseEditModal} disabled={editLoading}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                <TouchableOpacity
+                  style={[styles.formButton, styles.cancelButton]}
+                  onPress={handleCloseEditModal}
+                  disabled={editLoading}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <Button title="Save Changes" onPress={handleSaveProfile} loading={editLoading} style={{ flex: 1 }} />
+                <Button
+                  title="Save Changes"
+                  onPress={handleSaveProfile}
+                  loading={editLoading}
+                />
               </View>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Photo picker bottom sheet */}
-      <Modal visible={photoPickerTarget !== null} transparent animationType="none" onRequestClose={() => {
-        Animated.timing(sheetAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start();
-        setPhotoPickerTarget(null);
-      }}>
-        <Pressable style={styles.bottomSheetBackdrop} onPress={() => {
-          Animated.timing(sheetAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start();
-          setPhotoPickerTarget(null);
-        }} />
-        <Animated.View
-          style={[
-            styles.bottomSheet,
-            { transform: [{ translateY: sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] }) }] },
-          ]}
-        >
-          <View style={styles.bottomSheetHandle} />
-          <Text style={styles.bottomSheetTitle}>
-            {photoPickerTarget === 'avatar' ? 'Profile Photo' : 'Cover Photo'}
-          </Text>
-          <TouchableOpacity style={styles.bottomSheetOption} onPress={() => handlePhotoPickerOption('camera')} activeOpacity={0.7}>
-            <Camera size={20} color={Colors.gray700} />
-            <Text style={styles.bottomSheetOptionText}>Take Photo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.bottomSheetOption} onPress={() => handlePhotoPickerOption('gallery')} activeOpacity={0.7}>
-            <ImagePlus size={20} color={Colors.gray700} />
-            <Text style={styles.bottomSheetOptionText}>Choose from Gallery</Text>
-          </TouchableOpacity>
-          {((photoPickerTarget === 'avatar' && (editForm.avatar || profile?.avatar)) ||
-            (photoPickerTarget === 'cover' && (editForm.coverPhoto || profile?.coverPhotoUrl))) && (
-            <TouchableOpacity style={styles.bottomSheetOption} onPress={() => handlePhotoPickerOption('remove')} activeOpacity={0.7}>
-              <Trash2 size={20} color={Colors.error} />
-              <Text style={[styles.bottomSheetOptionText, { color: Colors.error }]}>Remove Current Photo</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.bottomSheetCancel} onPress={() => setPhotoPickerTarget(null)} activeOpacity={0.7}>
-            <Text style={styles.bottomSheetCancelText}>Cancel</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </Modal>
-
-      {/* Post Modal */}
       <Modal visible={showPostModal} transparent animationType="slide" onRequestClose={handleClosePostModal}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingPostId ? 'Edit Post' : 'New Post'}</Text>
+              <Text style={styles.modalTitle}>{editingPostId ? 'Edit Post' : 'Create Post'}</Text>
               <TouchableOpacity onPress={handleClosePostModal} activeOpacity={0.7}>
                 <X size={24} color={Colors.gray800} />
               </TouchableOpacity>
             </View>
 
             {postError && (
-              <View style={styles.errorBox}><Text style={styles.errorText}>{postError}</Text></View>
+              <View style={styles.errorBox}>
+                <Text style={styles.errorBoxText}>{postError}</Text>
+              </View>
             )}
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Caption</Text>
-                <TextInput style={styles.formInput} placeholder="Describe this work" value={postForm.caption} onChangeText={(t) => setPostForm((prev) => ({ ...prev, caption: t }))} placeholderTextColor={Colors.gray400} />
-              </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Caption</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Describe this work or achievement"
+                value={postForm.caption}
+                onChangeText={(text) => setPostForm((prev) => ({ ...prev, caption: text }))}
+                placeholderTextColor={Colors.gray400}
+              />
+            </View>
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Media</Text>
-                {postForm.mediaItems.length > 0 ? (
-                  postForm.mediaItems[0].mimeType.startsWith('video/') ? (
-                    <View style={styles.mediaPreviewPlaceholder}>
-                      <VideoIcon size={24} color={Colors.white} />
-                      <Text style={{ color: Colors.white, fontSize: FontSizes.sm, marginTop: 6 }}>Video selected</Text>
-                    </View>
-                  ) : (
-                    <Image source={{ uri: postForm.mediaItems[0].uri }} style={styles.mediaPreview} />
-                  )
-                ) : (
-                  <View style={styles.mediaPlaceholder}>
-                    <Camera size={32} color={Colors.gray400} />
-                    <Text style={{ color: Colors.gray500, fontSize: FontSizes.sm, marginTop: 8 }}>No media selected</Text>
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Media</Text>
+              {postForm.mediaItems.length > 0 ? (
+                postForm.mediaItems[0].mimeType.startsWith('video/') ? (
+                  <View style={styles.postModalVideoPreview}>
+                    <VideoIcon size={22} color={Colors.white} />
+                    <Text style={styles.postVideoText}>
+                      {postForm.mediaItems.length === 1 ? 'Video selected' : `${postForm.mediaItems.length} media selected`}
+                    </Text>
                   </View>
-                )}
-                {!editingPostId && (
-                  <Button title="Choose Photo/Video(s)" onPress={handlePickPostMedia} variant="outline" style={{ marginTop: 12 }} />
-                )}
-                {editingPostId && (
-                  <Text style={{ color: Colors.gray500, fontSize: FontSizes.xs, marginTop: 8 }}>Media cannot be changed when editing.</Text>
-                )}
-              </View>
+                ) : (
+                  <Image source={{ uri: postForm.mediaItems[0].uri }} style={styles.postModalImagePreview} />
+                )
+              ) : (
+                <Text style={styles.postsEmptyText}>No media selected</Text>
+              )}
+              {!editingPostId ? (
+                <View style={styles.postModalButtons}>
+                  <Button title="Choose Photo/Video(s)" onPress={handlePickPostMedia} />
+                </View>
+              ) : (
+                <Text style={styles.editPostHint}>Media replacement is not enabled yet. You can update caption.</Text>
+              )}
+            </View>
 
-              <View style={styles.formActions}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={handleClosePostModal} disabled={postUploading}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <Button title={editingPostId ? 'Save' : 'Upload'} onPress={handleUploadPost} loading={postUploading} style={{ flex: 1 }} />
-              </View>
-            </ScrollView>
+            <View style={styles.formActions}>
+              <TouchableOpacity
+                style={[styles.formButton, styles.cancelButton]}
+                onPress={handleClosePostModal}
+                disabled={postUploading}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <Button
+                title={editingPostId ? 'Save Changes' : 'Upload Post'}
+                onPress={handleUploadPost}
+                loading={postUploading}
+              />
+            </View>
           </View>
         </View>
       </Modal>
 
-      {/* Verification Modal */}
       <Modal visible={showVerificationModal} transparent animationType="fade" onRequestClose={() => setShowVerificationModal(false)}>
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.infoModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.infoModalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Verification</Text>
               <TouchableOpacity onPress={() => setShowVerificationModal(false)} activeOpacity={0.7}>
@@ -1532,45 +1908,39 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.verificationStatusCard}>
-              {verificationStatus === 'verified' ? (
-                <ShieldCheck size={48} color="#16A34A" />
-              ) : verificationStatus === 'pending' ? (
-                <Clock size={48} color="#D97706" />
-              ) : (
-                <Shield size={48} color={Colors.gray300} />
-              )}
-              <Text style={styles.verificationTitle}>
-                {verificationStatus === 'verified' ? 'Profile Verified' :
-                 verificationStatus === 'pending' ? 'Under Review' : 'Not Verified'}
-              </Text>
-              <Text style={styles.verificationDesc}>
-                {verificationStatus === 'verified' ? 'Your identity has been verified.' :
-                 verificationStatus === 'pending' ? 'Your verification request is being reviewed.' :
-                 'Verify your profile to build trust.'}
-              </Text>
-            </View>
+            <Text style={styles.infoModalText}>
+              {verificationStatus === 'verified'
+                ? 'Your profile is verified.'
+                : verificationStatus === 'pending'
+                  ? 'Your verification request is under review.'
+                  : 'Apply for verification to strengthen your profile trust.'}
+            </Text>
 
-            <View style={styles.feeCard}>
-              <Text style={styles.feeLabel}>Verification Fee</Text>
-              <Text style={styles.feeValue}>₹{verificationFee || 299}</Text>
+            <View style={styles.infoModalCard}>
+              <Text style={styles.infoModalCardLabel}>Fee</Text>
+              <Text style={styles.infoModalCardValue}>₹{verificationFee || 299}</Text>
             </View>
 
             {!!verificationRequestedAt && (
-              <Text style={styles.feeDate}>Requested on {new Date(verificationRequestedAt).toLocaleDateString()}</Text>
+              <Text style={styles.infoModalMeta}>
+                Requested on {new Date(verificationRequestedAt).toLocaleDateString()}
+              </Text>
             )}
 
             {(verificationStatus === 'none' || verificationStatus === 'rejected') && (
-              <Button title="Request Verification" onPress={handleRequestVerification} loading={verificationBusy} style={{ marginTop: 16 }} />
+              <Button
+                title={verificationBusy ? 'Submitting...' : 'Request Verification'}
+                onPress={handleRequestVerification}
+                loading={verificationBusy}
+              />
             )}
           </View>
         </View>
       </Modal>
 
-      {/* Badges Modal */}
       <Modal visible={showBadgesModal} transparent animationType="fade" onRequestClose={() => setShowBadgesModal(false)}>
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.infoModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.infoModalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Badges & Achievements</Text>
               <TouchableOpacity onPress={() => setShowBadgesModal(false)} activeOpacity={0.7}>
@@ -1581,12 +1951,11 @@ export default function ProfileScreen() {
             <View style={styles.badgesGrid}>
               {badgesData.map((badge) => (
                 <View key={badge.title} style={[styles.badgeCard, badge.active ? styles.badgeCardActive : styles.badgeCardInactive]}>
-                  <View style={[styles.badgeIconWrap, { backgroundColor: `${badge.color}18` }]}>
-                    <BadgeCheck size={20} color={badge.active ? badge.color : Colors.gray400} />
+                  <View style={[styles.badgeIconWrap, { backgroundColor: `${badge.color}20` }]}>
+                    <Award size={18} color={badge.color} />
                   </View>
-                  <Text style={[styles.badgeTitle, !badge.active && { color: Colors.gray400 }]}>{badge.title}</Text>
-                  <Text style={[styles.badgeDesc, !badge.active && { color: Colors.gray400 }]}>{badge.description}</Text>
-                  {badge.active && <Text style={[styles.badgeEarned, { color: badge.color }]}>Earned</Text>}
+                  <Text style={styles.badgeTitle}>{badge.title}</Text>
+                  <Text style={styles.badgeDescription}>{badge.description}</Text>
                 </View>
               ))}
             </View>
@@ -1594,10 +1963,9 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Ratings Modal */}
       <Modal visible={showRatingsModal} transparent animationType="fade" onRequestClose={() => setShowRatingsModal(false)}>
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.infoModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.infoModalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Reviews & Ratings</Text>
               <TouchableOpacity onPress={() => setShowRatingsModal(false)} activeOpacity={0.7}>
@@ -1605,55 +1973,78 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.ratingSummary}>
+            <View style={styles.ratingSummaryCard}>
               <Text style={styles.ratingSummaryValue}>{(ratingsSummary.averageRating || profile.stats.reviews || 0).toFixed(1)}</Text>
-              <Stars value={Math.round(ratingsSummary.averageRating || profile.stats.reviews || 0)} size={16} />
-              <Text style={styles.ratingSummaryMeta}>{ratingsSummary.totalRatings || 0} review{(ratingsSummary.totalRatings || 0) !== 1 ? 's' : ''}</Text>
+              <View style={styles.ratingStarsRow}>
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Star
+                    key={index}
+                    size={14}
+                    color={index < Math.round(ratingsSummary.averageRating || profile.stats.reviews || 0) ? '#F59E0B' : Colors.gray300}
+                    fill={index < Math.round(ratingsSummary.averageRating || profile.stats.reviews || 0) ? '#F59E0B' : 'transparent'}
+                  />
+                ))}
+              </View>
+              <Text style={styles.ratingSummaryMeta}>{ratingsSummary.totalRatings || 0} reviews</Text>
             </View>
 
             <TouchableOpacity
-              style={[styles.rateBtn, !canRateUser && styles.rateBtnDisabled]}
+              style={[styles.rateProfileButton, !canRateUser && styles.rateProfileButtonDisabled]}
               onPress={() => setShowRatingModal(true)}
               activeOpacity={0.8}
               disabled={!canRateUser}
             >
               <Star size={16} color={Colors.white} fill={Colors.white} />
-              <Text style={styles.rateBtnText}>{canRateUser ? 'Rate this profile' : (ratingEligibilityReason || 'Not eligible')}</Text>
+              <Text style={styles.rateProfileButtonText}>{canRateUser ? 'Rate this profile' : (ratingEligibilityReason || 'Not eligible to rate')}</Text>
             </TouchableOpacity>
 
             {insightsLoading ? (
-              <View style={{ paddingVertical: Spacing.lg, alignItems: 'center' }}>
+              <View style={styles.postsStateWrap}>
                 <ActivityIndicator size="small" color={Colors.primary} />
               </View>
             ) : ratings.length > 0 ? (
               <View style={styles.ratingsList}>
                 {ratings.slice(0, showAllRatings ? ratings.length : 5).map((item) => (
                   <View key={item.id} style={styles.ratingItem}>
-                    <Image source={{ uri: item.reviewer.avatar || 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200' }} style={styles.ratingAvatar} />
+                    <Image source={{ uri: item.reviewer.avatar }} style={styles.ratingAvatar} />
                     <View style={styles.ratingContent}>
                       <Text style={styles.ratingName}>{item.reviewer.fullName || item.reviewer.username}</Text>
-                      <Stars value={item.rating} size={12} />
+                      <View style={styles.ratingStarsRow}>
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <Star
+                            key={index}
+                            size={12}
+                            color={index < item.rating ? '#F59E0B' : Colors.gray300}
+                            fill={index < item.rating ? '#F59E0B' : 'transparent'}
+                          />
+                        ))}
+                      </View>
                       {!!item.comment && <Text style={styles.ratingComment}>{item.comment}</Text>}
                     </View>
                   </View>
                 ))}
                 {ratings.length > 5 && (
-                  <TouchableOpacity style={styles.viewAllBtn} onPress={() => setShowAllRatings((prev) => !prev)} activeOpacity={0.7}>
-                    <Text style={styles.viewAllText}>{showAllRatings ? 'Show less' : `View all ${ratings.length} reviews`}</Text>
+                  <TouchableOpacity
+                    style={styles.viewAllRatingsButton}
+                    onPress={() => setShowAllRatings((prev) => !prev)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.viewAllRatingsText}>
+                      {showAllRatings ? 'Show less' : `View all ${ratings.length} reviews`}
+                    </Text>
                   </TouchableOpacity>
                 )}
               </View>
             ) : (
-              <Text style={{ color: Colors.gray500, fontSize: FontSizes.sm, textAlign: 'center', paddingVertical: Spacing.md }}>No reviews yet.</Text>
+              <Text style={styles.emptyStateText}>No reviews yet.</Text>
             )}
           </View>
         </View>
       </Modal>
 
-      {/* Rating Modal */}
       <Modal visible={showRatingModal} transparent animationType="fade" onRequestClose={() => setShowRatingModal(false)}>
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.infoModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.infoModalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Rate Profile</Text>
               <TouchableOpacity onPress={() => setShowRatingModal(false)} activeOpacity={0.7}>
@@ -1661,16 +2052,23 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.ratingPrompt}>Review for {profile.fullName}</Text>
+            <Text style={styles.infoModalText}>
+              Share a quick review for {profile.fullName}.
+            </Text>
 
-            <View style={styles.ratingPicker}>
+            <View style={styles.ratingPickerWrap}>
               <View style={styles.ratingPickerRow}>
                 {Array.from({ length: 5 }).map((_, index) => {
                   const value = index + 1;
                   const active = value <= ratingValue;
                   return (
-                    <TouchableOpacity key={value} onPress={() => setRatingValue(value)} activeOpacity={0.8} style={styles.ratingPickBtn}>
-                      <Star size={28} color={active ? '#F59E0B' : Colors.gray300} fill={active ? '#F59E0B' : 'transparent'} />
+                    <TouchableOpacity
+                      key={value}
+                      onPress={() => setRatingValue(value)}
+                      activeOpacity={0.85}
+                      style={styles.ratingPickButton}
+                    >
+                      <Star size={22} color={active ? '#F59E0B' : Colors.gray300} fill={active ? '#F59E0B' : 'transparent'} />
                     </TouchableOpacity>
                   );
                 })}
@@ -1687,90 +2085,21 @@ export default function ProfileScreen() {
                 onChangeText={setRatingComment}
                 placeholderTextColor={Colors.gray400}
                 multiline
-                numberOfLines={3}
+                numberOfLines={4}
                 textAlignVertical="top"
               />
             </View>
 
-            <Button title="Submit rating" onPress={handleSubmitRating} loading={ratingSubmitting} />
+            <Button
+              title={ratingSubmitting ? 'Submitting...' : 'Submit rating'}
+              onPress={handleSubmitRating}
+              loading={ratingSubmitting}
+            />
           </View>
         </View>
       </Modal>
-
-      {/* Full-Screen Media Viewer */}
-      <Modal visible={showMediaViewer} transparent animationType="none" onRequestClose={closeMediaViewer} statusBarTranslucent>
-        <View style={styles.viewerContainer}>
-          <Animated.View
-            style={[StyleSheet.absoluteFill, { opacity: mediaViewerAnim, backgroundColor: '#000' }]}
-          />
-          <Animated.View
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                transform: [
-                  { translateX: mediaViewerPan.x },
-                  { translateY: mediaViewerPan.y },
-                  { scale: mediaViewerScale },
-                ],
-              },
-            ]}
-            {...mediaPanResponder.panHandlers}
-          >
-            {posts[mediaViewerIndex]?.mediaType === 'image' ? (
-              <Image
-                source={{ uri: posts[mediaViewerIndex]?.mediaUrl }}
-                style={styles.viewerMedia}
-                resizeMode="contain"
-              />
-            ) : (
-              <Video
-                source={{ uri: posts[mediaViewerIndex]?.mediaUrl }}
-                style={styles.viewerMedia}
-                resizeMode={ResizeMode.CONTAIN}
-                useNativeControls
-                shouldPlay
-                isLooping
-              />
-            )}
-          </Animated.View>
-
-          {/* Close button */}
-          <TouchableOpacity style={styles.viewerCloseBtn} onPress={closeMediaViewer} activeOpacity={0.7}>
-            <X size={24} color={Colors.white} />
-          </TouchableOpacity>
-
-          {/* Post counter */}
-          {posts.length > 1 && (
-            <View style={styles.viewerCounter}>
-              <Text style={styles.viewerCounterText}>{mediaViewerIndex + 1} / {posts.length}</Text>
-            </View>
-          )}
-
-          {/* Caption */}
-          {!!posts[mediaViewerIndex]?.caption && (
-            <View style={styles.viewerCaption}>
-              <Text style={styles.viewerCaptionText} numberOfLines={2}>{posts[mediaViewerIndex].caption}</Text>
-            </View>
-          )}
-
-          {/* Swipe hints */}
-          {posts.length > 1 && (
-            <View style={styles.viewerNavHints}>
-              {mediaViewerIndex > 0 && (
-                <TouchableOpacity style={styles.viewerNavBtn} onPress={goToPrevPost} activeOpacity={0.7}>
-                  <ChevronRight size={20} color={Colors.white} style={{ transform: [{ rotate: '180deg' }] }} />
-                </TouchableOpacity>
-              )}
-              {mediaViewerIndex < posts.length - 1 && (
-                <TouchableOpacity style={styles.viewerNavBtn} onPress={goToNextPost} activeOpacity={0.7}>
-                  <ChevronRight size={20} color={Colors.white} />
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
-      </Modal>
-    </View>
+    </Animated.View>
+  </ScrollView>
   );
 }
 
@@ -1779,26 +2108,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.gray50,
   },
-  card: {
-    backgroundColor: Colors.white,
-    marginHorizontal: CARD_MARGIN,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+  errorText: {
+    fontSize: FontSizes.md,
+    color: Colors.error,
+    fontWeight: FontWeights.medium as any,
   },
-
-  // Cover
-  coverWrapper: {
+  devSignInBtn: {
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+  },
+  devSignInText: {
+    color: Colors.white,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  headerBg: {
+    backgroundColor: Colors.white,
+    paddingBottom: Spacing.xl,
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
+  },
+  coverSection: {
+    height: 170,
+    marginBottom: Spacing.lg,
     position: 'relative',
     overflow: 'hidden',
+    borderBottomLeftRadius: BorderRadius.xl,
+    borderBottomRightRadius: BorderRadius.xl,
+    backgroundColor: Colors.gray100,
   },
   coverImage: {
     width: '100%',
-    resizeMode: 'cover',
+    height: '100%',
   },
   coverPlaceholder: {
     flex: 1,
@@ -1806,22 +2149,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  coverPlaceholderText: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray500,
+    fontWeight: FontWeights.medium as any,
+  },
   coverOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.20)',
+    backgroundColor: 'rgba(17, 24, 39, 0.18)',
   },
   coverActions: {
     position: 'absolute',
-    top: 56,
+    top: Spacing.md,
     right: Spacing.md,
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
-  coverActionBtn: {
+  coverActionButton: {
     width: 36,
     height: 36,
     borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(17, 24, 39, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1829,44 +2177,37 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: Spacing.md,
     bottom: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: BorderRadius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   goalBadgeText: {
     fontSize: FontSizes.xs,
     color: Colors.gray900,
     fontWeight: FontWeights.semiBold as any,
   },
-
-  // Profile Info
-  profileInfoWrapper: {
+  profileSection: {
     alignItems: 'center',
+    paddingTop: 0,
+    marginTop: -46,
     paddingHorizontal: Spacing.lg,
   },
-  avatarOuter: {
+  avatarContainer: {
     position: 'relative',
-    padding: 4,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.full,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    padding: 4, // Space for the border
   },
   avatar: {
+    width: 110,
+    height: 110,
+    borderRadius: BorderRadius.full,
     borderWidth: 3,
-    borderColor: Colors.white,
+    borderColor: Colors.primary,
   },
-  avatarEditBtn: {
+  avatarEditButton: {
     position: 'absolute',
-    bottom: 6,
-    right: 6,
+    bottom: 5,
+    right: 5,
     backgroundColor: Colors.primary,
     width: 32,
     height: 32,
@@ -1879,7 +2220,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowRadius: 2,
   },
   name: {
     fontSize: FontSizes.xxl,
@@ -1887,103 +2228,56 @@ const styles = StyleSheet.create({
     color: Colors.gray900,
     marginTop: Spacing.md,
   },
-  infoRow: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     marginTop: 4,
+    marginBottom: 2,
   },
-  infoText: {
+  location: {
     fontSize: FontSizes.sm,
-    color: Colors.gray500,
-  },
-  professionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-    backgroundColor: Colors.primary + '0E',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.full,
+    color: Colors.gray600,
+    marginLeft: 4,
   },
   professionText: {
+    marginTop: 4,
     fontSize: FontSizes.sm,
     color: Colors.primary,
     fontWeight: FontWeights.semiBold as any,
   },
+  subInfo: {
+    marginTop: 2,
+    fontSize: FontSizes.xs,
+    color: Colors.gray600,
+  },
   email: {
     fontSize: FontSizes.sm,
-    color: Colors.gray400,
-    marginTop: 6,
+    color: Colors.gray500,
   },
-  metaRow: {
+  headerMetaRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
     marginTop: Spacing.md,
   },
-  verificationChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  verifiedChip: {
-    backgroundColor: '#DCFCE7',
-  },
-  pendingChip: {
-    backgroundColor: '#FEF3C7',
-  },
-  neutralChip: {
-    backgroundColor: Colors.gray100,
-  },
-  verificationText: {
-    fontSize: FontSizes.xs,
-    fontWeight: FontWeights.semiBold as any,
-  },
-  socialWrap: {
-    marginTop: Spacing.md,
-    width: '100%',
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  socialChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  socialChipText: {
-    fontSize: FontSizes.xs,
-    fontWeight: FontWeights.medium as any,
-    textTransform: 'capitalize',
-  },
-
-  // Stats
   statsRow: {
     flexDirection: 'row',
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    marginTop: -Spacing.md,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
-  },
-  statIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: BorderRadius.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
   },
   statValue: {
     fontSize: FontSizes.xl,
@@ -1993,182 +2287,416 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: FontSizes.xs,
     color: Colors.gray500,
+    marginTop: 2,
   },
-
-  // Menu
+  menuSection: {
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+  },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-    gap: 14,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
   },
-  menuDivider: {
-    height: 1,
-    backgroundColor: Colors.gray100,
-    marginLeft: 54,
-  },
-  menuIconWrap: {
-    width: 42,
-    height: 42,
+  menuIcon: {
+    width: 40,
+    height: 40,
     borderRadius: BorderRadius.md,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  menuContent: {
-    flex: 1,
-    gap: 2,
+    marginRight: Spacing.md,
   },
   menuLabel: {
+    flex: 1,
     fontSize: FontSizes.md,
+    fontWeight: FontWeights.medium as any,
+    color: Colors.gray800,
+  },
+  socialPreviewWrap: {
+    marginTop: Spacing.md,
+    width: '100%',
+  },
+  sectionEyebrow: {
+    fontSize: FontSizes.xs,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: Colors.gray500,
+    fontWeight: FontWeights.semiBold as any,
+    marginBottom: 8,
+  },
+  socialPreviewRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  socialPreviewChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.gray100,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  socialPreviewText: {
+    maxWidth: 84,
+    fontSize: FontSizes.xs,
+    color: Colors.gray700,
+    fontWeight: FontWeights.medium as any,
+    textTransform: 'capitalize',
+  },
+  verificationChip: {
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  verificationChipVerified: {
+    backgroundColor: '#DCFCE7',
+  },
+  verificationChipPending: {
+    backgroundColor: '#FEF3C7',
+  },
+  verificationChipNeutral: {
+    backgroundColor: Colors.gray100,
+  },
+  verificationChipText: {
+    fontSize: FontSizes.xs,
     fontWeight: FontWeights.semiBold as any,
     color: Colors.gray900,
   },
-  menuDesc: {
-    fontSize: FontSizes.xs,
-    color: Colors.gray400,
+  bioSection: {
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
   },
-
-  // Section
-  sectionTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  sectionTitle: {
+  bioTitle: {
     fontSize: FontSizes.lg,
     fontWeight: FontWeights.semiBold as any,
     color: Colors.gray900,
+    marginBottom: Spacing.sm,
   },
-
-  // Bio
   bioText: {
-    fontSize: FontSizes.sm,
+    fontSize: FontSizes.md,
     color: Colors.gray600,
     lineHeight: 22,
   },
-
-  // Skills
+  skillsSection: {
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+  },
+  skillsTitle: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray900,
+    marginBottom: Spacing.md,
+  },
   skillsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
+  profileInfoSection: {
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    gap: 12,
+    marginBottom: Spacing.xl,
+  },
+  profileInfoSectionLabel: {
+    fontSize: 10,
+    color: Colors.gray500,
+    fontWeight: FontWeights.bold as any,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+  },
+  profileInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  profileInfoCard: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    backgroundColor: Colors.gray50,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.md,
+    gap: 12,
+  },
+  profileInfoCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  profileInfoAccent: {
+    width: 6,
+    height: 18,
+    borderRadius: BorderRadius.full,
+  },
+  profileInfoCardLabel: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray500,
+    fontWeight: FontWeights.bold as any,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  profileInfoRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  profileInfoCell: {
+    flex: 1,
+    gap: 3,
+  },
+  profileInfoItem: {
+    gap: 4,
+  },
+  profileInfoDivider: {
+    height: 1,
+    backgroundColor: Colors.gray200,
+  },
+  profileInfoKey: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray500,
+    fontWeight: FontWeights.medium as any,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  profileInfoValue: {
+    fontSize: FontSizes.sm,
+    color: Colors.gray900,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  profileInfoValueEmphasis: {
+    fontSize: FontSizes.sm,
+    color: Colors.primary,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  profileInfoInlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  profileInfoPill: {
+    backgroundColor: Colors.primary + '10',
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  profileInfoPillText: {
+    fontSize: 9,
+    color: Colors.primary,
+    fontWeight: FontWeights.bold as any,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
   skillChip: {
-    backgroundColor: Colors.primary + '0E',
+    backgroundColor: Colors.primary + '12',
     borderRadius: BorderRadius.full,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
   skillText: {
     fontSize: FontSizes.sm,
     color: Colors.primary,
     fontWeight: FontWeights.medium as any,
   },
-
-  // Profile Info Cards
-  infoGrid: {
-    gap: 10,
-  },
-  infoCard: {
-    backgroundColor: Colors.gray50,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    gap: 10,
-  },
-  infoCardAccent: {
-    width: 6,
-    height: 20,
-    borderRadius: BorderRadius.full,
-    marginBottom: 4,
-  },
-  infoCardLabel: {
-    fontSize: FontSizes.xs,
-    color: Colors.gray500,
-    fontWeight: FontWeights.bold as any,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  infoCell: {
-    flex: 1,
-    gap: 2,
-  },
-  infoItem: {
-    gap: 2,
-  },
-  infoDivider: {
-    height: 1,
-    backgroundColor: Colors.gray200,
-    marginVertical: 4,
-  },
-  infoKey: {
-    fontSize: FontSizes.xs,
-    color: Colors.gray500,
-    fontWeight: FontWeights.medium as any,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  infoValue: {
+  emptySkillsText: {
     fontSize: FontSizes.sm,
+    color: Colors.gray500,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  inlineActionText: {
+    color: Colors.primary,
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  helperText: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray500,
+    lineHeight: 18,
+  },
+  socialLinkEditor: {
+    marginTop: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.gray50,
+    gap: 10,
+  },
+  platformChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  removeSocialLinkButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  removeSocialLinkText: {
+    color: Colors.error,
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  postsSection: {
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+    marginTop: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+  },
+  postsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  postsTitle: {
+    fontSize: FontSizes.lg,
     color: Colors.gray900,
     fontWeight: FontWeights.semiBold as any,
   },
-
-  // Posts
-  uploadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  addPostButton: {
     backgroundColor: Colors.primary,
     paddingHorizontal: Spacing.md,
     paddingVertical: 8,
     borderRadius: BorderRadius.full,
   },
-  uploadBtnText: {
+  addPostButtonText: {
     color: Colors.white,
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.semiBold as any,
   },
+  postsStateWrap: {
+    paddingVertical: Spacing.lg,
+    alignItems: 'center',
+  },
+  postsErrorText: {
+    color: Colors.error,
+    fontSize: FontSizes.sm,
+  },
+  postsEmptyText: {
+    color: Colors.gray500,
+    fontSize: FontSizes.sm,
+  },
   postsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: CARD_GAP,
+    justifyContent: 'space-between',
+    gap: Spacing.md,
   },
   postCard: {
+    width: '47%',
   },
-  postMedia: {
+  postImage: {
     width: '100%',
     aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+  },
+  postVideoPlaceholder: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.gray800,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  postVideoPlayer: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.black,
+  },
+  postVideoText: {
+    color: Colors.white,
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.medium as any,
+  },
+  postCaption: {
+    marginTop: 6,
+    color: Colors.gray800,
+    fontSize: FontSizes.xs,
+  },
+  postDateText: {
+    marginTop: 4,
+    color: Colors.gray500,
+    fontSize: FontSizes.xs,
+  },
+  postActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  postActionBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.md,
     backgroundColor: Colors.gray100,
   },
-
-  // Modal
+  postActionText: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray800,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  
+  // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
-  modalOverlayCenter: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.lg,
-  },
-  modalContainer: {
+  modalContent: {
     backgroundColor: Colors.white,
     borderTopLeftRadius: BorderRadius.xl,
     borderTopRightRadius: BorderRadius.xl,
     paddingTop: Spacing.lg,
     paddingHorizontal: Spacing.lg,
-    maxHeight: '92%',
+    maxHeight: '90%',
   },
-  infoModal: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    maxHeight: '85%',
+  postModalImagePreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: BorderRadius.md,
+  },
+  postModalVideoPreview: {
+    width: '100%',
+    height: 140,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.gray800,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  postModalButtons: {
+    marginTop: Spacing.md,
+  },
+  editPostHint: {
+    marginTop: Spacing.sm,
+    color: Colors.gray500,
+    fontSize: FontSizes.xs,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -2177,45 +2705,40 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   modalTitle: {
-    fontSize: FontSizes.xl,
+    fontSize: FontSizes.xxl,
     fontWeight: FontWeights.bold as any,
     color: Colors.gray900,
   },
-  modalBody: {
+  formContent: {
     marginBottom: Spacing.lg,
-  },
-
-  // Form
-  formSection: {
-    marginBottom: Spacing.lg,
-  },
-  formSectionTitle: {
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.bold as any,
-    color: Colors.gray500,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: Spacing.md,
   },
   formGroup: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
-  formRow: {
-    flexDirection: 'row',
-    gap: 12,
+  photoSection: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+    gap: Spacing.md,
+  },
+  modalAvatar: {
+    width: 84,
+    height: 84,
+    borderRadius: BorderRadius.full,
+    borderWidth: 2,
+    borderColor: Colors.primary,
   },
   formLabel: {
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.semiBold as any,
     color: Colors.gray700,
-    marginBottom: 6,
+    marginBottom: Spacing.sm,
   },
   formInput: {
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.gray300,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     fontSize: FontSizes.md,
     color: Colors.gray900,
     backgroundColor: Colors.white,
@@ -2224,319 +2747,112 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: 'top',
   },
-  chipWrap: {
+  optionWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderColor: Colors.gray200,
+  optionChip: {
+    borderWidth: 1,
+    borderColor: Colors.gray300,
     borderRadius: BorderRadius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     backgroundColor: Colors.white,
   },
-  chipActive: {
+  optionChipSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '0E',
+    backgroundColor: Colors.primary + '14',
   },
-  chipText: {
+  optionChipText: {
     color: Colors.gray700,
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.medium as any,
   },
-  chipTextActive: {
+  optionChipTextSelected: {
     color: Colors.primary,
   },
-  platformChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderColor: Colors.gray200,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-
-  // Error
   errorBox: {
     backgroundColor: '#FEE2E2',
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
-  errorText: {
+  errorBoxText: {
     color: Colors.error,
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.medium as any,
   },
-
-  // Actions
   formActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
     marginBottom: Spacing.xl,
   },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.gray100,
-  },
-  cancelBtnText: {
-    color: Colors.gray700,
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.semiBold as any,
-  },
-
-  // Edit photo area - overlapping cover + avatar
-  editCoverWrap: {
-    position: 'relative',
-    marginBottom: 60,
-    marginHorizontal: -Spacing.lg,
-  },
-  editCoverTouch: {
-    width: '100%',
-    height: 180,
-    overflow: 'hidden',
-  },
-  editCoverImg: {
-    width: '100%',
-    height: '100%',
-  },
-  editCoverPlaceholder: {
-    flex: 1,
-    backgroundColor: Colors.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editCoverOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingBottom: 12,
-  },
-  editAvatarWrap: {
-    position: 'absolute',
-    bottom: -40,
-    alignSelf: 'center',
-    borderRadius: BorderRadius.full,
-    borderWidth: 4,
-    borderColor: Colors.white,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  editAvatarImg: {
-    width: 96,
-    height: 96,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.gray200,
-  },
-  editAvatarOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 30,
-    height: 30,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2.5,
-    borderColor: Colors.white,
-  },
-
-  // Bottom sheet
-  bottomSheetBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  infoModalContent: {
     backgroundColor: Colors.white,
     borderTopLeftRadius: BorderRadius.xl,
     borderTopRightRadius: BorderRadius.xl,
+    paddingTop: Spacing.lg,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: 40,
-    paddingTop: Spacing.sm,
-    elevation: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    maxHeight: '88%',
   },
-  bottomSheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.gray300,
-    alignSelf: 'center',
-    marginBottom: Spacing.md,
-  },
-  bottomSheetTitle: {
-    fontSize: FontSizes.lg,
-    fontWeight: FontWeights.bold as any,
-    color: Colors.gray900,
-    marginBottom: Spacing.md,
-    textAlign: 'center',
-  },
-  bottomSheetOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: BorderRadius.md,
-  },
-  bottomSheetOptionText: {
-    fontSize: FontSizes.md,
-    color: Colors.gray800,
-    fontWeight: FontWeights.medium as any,
-  },
-  bottomSheetCancel: {
-    marginTop: Spacing.sm,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.gray100,
-  },
-  bottomSheetCancelText: {
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.semiBold as any,
+  infoModalText: {
     color: Colors.gray700,
-  },
-
-  // Social editor
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  helperText: {
-    fontSize: FontSizes.xs,
-    color: Colors.gray500,
-    lineHeight: 18,
-  },
-  socialEditor: {
-    marginTop: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.gray50,
-    gap: 8,
-  },
-
-  // Media
-  mediaPreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.gray100,
-  },
-  mediaPreviewPlaceholder: {
-    width: '100%',
-    height: 160,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.gray800,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mediaPlaceholder: {
-    width: '100%',
-    height: 160,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Verification
-  verificationStatusCard: {
-    alignItems: 'center',
-    paddingVertical: Spacing.lg,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.gray50,
+    fontSize: FontSizes.md,
+    lineHeight: 22,
     marginBottom: Spacing.md,
-    gap: 8,
   },
-  verificationTitle: {
-    fontSize: FontSizes.lg,
-    fontWeight: FontWeights.bold as any,
-    color: Colors.gray900,
-  },
-  verificationDesc: {
-    fontSize: FontSizes.sm,
-    color: Colors.gray600,
-    textAlign: 'center',
-    paddingHorizontal: Spacing.md,
-  },
-  feeCard: {
+  infoModalCard: {
     backgroundColor: Colors.gray50,
     borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.gray200,
   },
-  feeLabel: {
-    fontSize: FontSizes.xs,
+  infoModalCardLabel: {
     color: Colors.gray500,
+    fontSize: FontSizes.xs,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    fontWeight: FontWeights.semiBold as any,
     marginBottom: 4,
+    fontWeight: FontWeights.semiBold as any,
   },
-  feeValue: {
+  infoModalCardValue: {
+    color: Colors.gray900,
     fontSize: FontSizes.xl,
     fontWeight: FontWeights.bold as any,
-    color: Colors.gray900,
   },
-  feeDate: {
-    fontSize: FontSizes.sm,
+  infoModalMeta: {
     color: Colors.gray500,
-    marginTop: Spacing.sm,
+    fontSize: FontSizes.sm,
+    marginBottom: Spacing.md,
   },
-
-  // Badges
   badgesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    paddingBottom: Spacing.sm,
+    gap: 12,
+    paddingBottom: Spacing.md,
   },
   badgeCard: {
-    width: '47%',
+    width: '48%',
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
     borderWidth: 1,
-    gap: 6,
+    gap: 8,
   },
   badgeCardActive: {
-    backgroundColor: Colors.gray50,
-    borderColor: Colors.primary + '20',
+    backgroundColor: '#F8FAFC',
+    borderColor: Colors.primary + '24',
   },
   badgeCardInactive: {
     backgroundColor: Colors.gray50,
     borderColor: Colors.gray200,
-    opacity: 0.65,
+    opacity: 0.7,
   },
   badgeIconWrap: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: BorderRadius.full,
     justifyContent: 'center',
     alignItems: 'center',
@@ -2546,56 +2862,90 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.semiBold as any,
     color: Colors.gray900,
   },
-  badgeDesc: {
+  badgeDescription: {
     fontSize: FontSizes.xs,
-    color: Colors.gray500,
-    lineHeight: 16,
+    lineHeight: 18,
+    color: Colors.gray600,
   },
-  badgeEarned: {
-    fontSize: FontSizes.xs,
-    fontWeight: FontWeights.bold as any,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-
-  // Ratings
-  ratingSummary: {
+  ratingSummaryCard: {
     alignItems: 'center',
     paddingVertical: Spacing.lg,
     borderRadius: BorderRadius.lg,
     backgroundColor: Colors.gray50,
     marginBottom: Spacing.md,
+  },
+  rateProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  rateProfileButtonDisabled: {
+    backgroundColor: Colors.gray300,
+  },
+  rateProfileButtonText: {
+    color: Colors.white,
+    fontWeight: FontWeights.semiBold as any,
+    marginLeft: 6,
+  },
+  ratingPickerWrap: {
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  ratingPickerRow: {
+    flexDirection: 'row',
     gap: 8,
+    marginBottom: Spacing.xs,
+  },
+  ratingPickerLabel: {
+    color: Colors.gray600,
+    fontSize: FontSizes.sm,
+    marginTop: 4,
+  },
+  ratingPickButton: {
+    padding: Spacing.xs,
+  },
+  ratingCommentInput: {
+    height: 96,
+    textAlignVertical: 'top',
   },
   ratingSummaryValue: {
-    fontSize: 36,
-    fontWeight: FontWeights.bold as any,
+    fontSize: 34,
     color: Colors.gray900,
+    fontWeight: FontWeights.bold as any,
   },
   ratingSummaryMeta: {
+    marginTop: 6,
     color: Colors.gray500,
     fontSize: FontSizes.sm,
   },
-  rateBtn: {
+  ratingStarsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: Colors.primary,
-    paddingVertical: 12,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.md,
-  },
-  rateBtnDisabled: {
-    backgroundColor: Colors.gray300,
-  },
-  rateBtnText: {
-    color: Colors.white,
-    fontWeight: FontWeights.semiBold as any,
+    gap: 3,
+    marginTop: 6,
   },
   ratingsList: {
-    gap: 10,
-    paddingBottom: Spacing.sm,
+    gap: 12,
+    paddingBottom: Spacing.md,
+  },
+  viewAllRatingsButton: {
+    marginTop: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary + '10',
+    borderWidth: 1,
+    borderColor: Colors.primary + '20',
+  },
+  viewAllRatingsText: {
+    color: Colors.primary,
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semiBold as any,
   },
   ratingItem: {
     flexDirection: 'row',
@@ -2607,8 +2957,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.gray100,
   },
   ratingAvatar: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: BorderRadius.full,
     backgroundColor: Colors.gray200,
   },
@@ -2617,153 +2967,58 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   ratingName: {
+    color: Colors.gray900,
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.semiBold as any,
-    color: Colors.gray900,
   },
   ratingComment: {
+    color: Colors.gray700,
     fontSize: FontSizes.sm,
-    color: Colors.gray600,
     lineHeight: 20,
   },
-  viewAllBtn: {
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.primary + '0A',
-    borderWidth: 1,
-    borderColor: Colors.primary + '18',
-  },
-  viewAllText: {
-    color: Colors.primary,
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.semiBold as any,
-  },
-
-  // Rating picker
-  ratingPrompt: {
-    fontSize: FontSizes.md,
-    color: Colors.gray600,
-    marginBottom: Spacing.md,
-    textAlign: 'center',
-  },
-  ratingPicker: {
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-    gap: 8,
-  },
-  ratingPickerRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  ratingPickBtn: {
-    padding: 4,
-  },
-  ratingPickerLabel: {
-    color: Colors.gray600,
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.medium as any,
-  },
-  ratingCommentInput: {
-    height: 90,
-    textAlignVertical: 'top',
-  },
-
-  // Video play icon overlay
-  postMediaVideo: {
-    position: 'relative',
-    width: '100%',
-    aspectRatio: 1,
-  },
-  videoPlayIcon: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -18,
-    marginTop: -18,
-    width: 36,
-    height: 36,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Full-screen media viewer
-  viewerContainer: {
+  formButton: {
     flex: 1,
-    backgroundColor: '#000',
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  viewerMedia: {
-    width: '100%',
-    height: '100%',
+  cancelButton: {
+    backgroundColor: Colors.gray100,
   },
-  viewerCloseBtn: {
-    position: 'absolute',
-    top: 56,
-    right: Spacing.md,
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  viewerCounter: {
-    position: 'absolute',
-    top: 60,
-    left: Spacing.md,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  viewerCounterText: {
-    color: Colors.white,
-    fontSize: FontSizes.sm,
+  cancelButtonText: {
+    color: Colors.gray700,
+    fontSize: FontSizes.md,
     fontWeight: FontWeights.semiBold as any,
   },
-  viewerCaption: {
-    position: 'absolute',
-    bottom: 40,
-    left: Spacing.md,
-    right: Spacing.md,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  userCodeBadge: {
+    marginTop: Spacing.lg,
+    backgroundColor: Colors.primary + '10',
     borderRadius: BorderRadius.md,
-    padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+    alignItems: 'center',
   },
-  viewerCaptionText: {
-    color: Colors.white,
+  userCodeLabel: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray600,
+    fontWeight: FontWeights.medium as any,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  userCodeText: {
+    fontSize: FontSizes.lg,
+    color: Colors.primary,
+    fontWeight: FontWeights.bold as any,
+    letterSpacing: 1.5,
+  },
+  emptyStateText: {
+    color: Colors.gray500,
     fontSize: FontSizes.sm,
     textAlign: 'center',
-  },
-  viewerNavHints: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    pointerEvents: 'box-none',
-  },
-  viewerNavBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Misc
-  emptyText: {
-    fontSize: FontSizes.sm,
-    color: Colors.gray500,
+    paddingVertical: Spacing.md,
   },
 });
