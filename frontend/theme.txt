@@ -1,0 +1,47 @@
+Optimized tool selectionI’m locating the project’s theme source and color tokens first, then I’ll condense them into a documentation-friendly palette summary.
+
+Searched for files matching `**/theme.ts`, 1 match
+
+Searched for regex `theme|color|colors|background|primary|secondary` (`**/frontend/**/*.{ts,tsx,js,jsx,json,md}`), 100 results
+
+I found a single shared theme module, so I’m reading that plus one or two consumers to confirm whether the app uses one palette or separate light/dark variants.
+
+Read [](file:///c%3A/Users/User/Desktop/Krova-app/frontend/constants/theme.ts)
+
+Read [](file:///c%3A/Users/User/Desktop/Krova-app/frontend/components/Button.tsx)
+
+Read [](file:///c%3A/Users/User/Desktop/Krova-app/frontend/app/_layout.tsx)
+
+I have the core token file now. I’m checking for any hardcoded hex values outside it so the documentation can distinguish the official palette from one-off usage.
+
+Searched for regex `#[0-9A-Fa-f]{6}\b` (`**/frontend/**/*.{ts,tsx,js,jsx,md}`), 24 results
+
+I’ve confirmed the base palette and I’m doing one quick check for alternate theme variants so I don’t misdocument a light-only app as if it had dark mode.
+
+Searched for regex `useColorScheme|dark:|DarkTheme|light:|theme` (`**/frontend/**/*.{ts,tsx,js,jsx}`), 12 results
+
+**Color Scheme**
+
+The project uses a single shared, light-first theme defined in theme.ts. There is no separate dark theme module or color-mode switch in the app layout.
+
+The documented palette is:
+
+- Primary blue: #0066FF
+- Secondary green: #00B341
+- Accent orange: #FF6B35
+- Success green: #00B341
+- Warning amber: #FFA500
+- Error red: #E63946
+- White: #FFFFFF
+- Black: #000000
+- Neutral grays: #F8F9FA, #F1F3F5, #E9ECEF, #DEE2E6, #CED4DA, #ADB5BD, #868E96, #495057, #343A40, #212529
+
+In usage, the UI follows a clean white-and-gray base with blue as the main action color, green for positive states, orange for accents/warnings, and red for errors. The button component uses primary blue and secondary green as its main variants in Button.tsx.
+
+There are also a few screen-level hardcoded colors outside the shared theme, mainly for one-off states:
+- Login and register error banners: #FEE2E2 in frontend/app/(auth)/login.tsx/login.tsx#L122) and frontend/app/(auth)/register.tsx/register.tsx#L127)
+- Chat background: #F7F8FC in [frontend/app/chat/[id].tsx](frontend/app/chat/[id].tsx#L93)
+- Wallet transaction chips: #E6F9EE and #FFF0EB in frontend/app/(tabs)/wallet.tsx/wallet.tsx#L61)
+- Profile rating icon accent: #F59E0B in frontend/app/(tabs)/profile.tsx/profile.tsx#L16)
+
+If you want, I can turn this into a polished README-ready “Design Tokens” section next.

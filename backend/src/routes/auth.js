@@ -6,6 +6,7 @@ import { prisma } from '../config/db.js';
 
 const router = express.Router();
 const pendingRegistrations = new Map();
+const pendingPasswordResets = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000;
 const USER_CODE_LENGTH = 6;
 const USER_CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -125,6 +126,22 @@ function getPendingRegistration(email) {
 
   if (pending.expiresAt < Date.now()) {
     pendingRegistrations.delete(key);
+    return null;
+  }
+
+  return pending;
+}
+
+function getPendingPasswordReset(email) {
+  const key = email.toLowerCase();
+  const pending = pendingPasswordResets.get(key);
+
+  if (!pending) {
+    return null;
+  }
+
+  if (pending.expiresAt < Date.now()) {
+    pendingPasswordResets.delete(key);
     return null;
   }
 
@@ -316,6 +333,119 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Something went wrong.' });
+  }
+});
+
+router.post('/forgot-password/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findUnique({ where: { email: normalizedEmail } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email.' });
+    }
+
+    const otp = generateOtp();
+    const expiresAt = Date.now() + OTP_TTL_MS;
+    pendingPasswordResets.set(normalizedEmail, {
+      email: normalizedEmail,
+      userId: user.id,
+      otp,
+      expiresAt,
+    });
+
+    const transporter = createTransporter();
+    const { fromEmail, fromName } = getSmtpSettings();
+
+    await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: normalizedEmail,
+      subject: 'Password Reset Code',
+      text: `Your password reset code is ${otp}. It expires in 10 minutes.`,
+      html: `<p>Your password reset code is <strong>${otp}</strong>.</p><p>This code expires in 10 minutes.</p>`,
+    });
+
+    return res.json({
+      message: 'OTP sent successfully.',
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to send OTP.' });
+  }
+});
+
+router.post('/forgot-password/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP are required.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const pending = getPendingPasswordReset(normalizedEmail);
+
+    if (!pending) {
+      return res.status(400).json({ error: 'OTP has expired or was not requested.' });
+    }
+
+    if (pending.otp !== otp.trim()) {
+      return res.status(400).json({ error: 'Invalid OTP.' });
+    }
+
+    return res.json({
+      message: 'OTP verified successfully.',
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to verify OTP.' });
+  }
+});
+
+router.post('/forgot-password/reset', async (req, res) => {
+  try {
+    const { email, otp, newPassword, confirmPassword } = req.body;
+
+    if (!email || !otp || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const pending = getPendingPasswordReset(normalizedEmail);
+
+    if (!pending) {
+      return res.status(400).json({ error: 'OTP has expired or was not requested.' });
+    }
+
+    if (pending.otp !== otp.trim()) {
+      return res.status(400).json({ error: 'Invalid OTP.' });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    await User.update({
+      where: { id: pending.userId },
+      data: { password: hashedPassword },
+    });
+
+    pendingPasswordResets.delete(normalizedEmail);
+
+    return res.json({
+      message: 'Password reset successfully.',
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to reset password.' });
   }
 });
 

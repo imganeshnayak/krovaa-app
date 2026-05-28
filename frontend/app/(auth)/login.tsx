@@ -1,10 +1,25 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, TextInput } from 'react-native';
-import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Link, useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TextInput,
+} from 'react-native';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
-import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import {
+  Colors,
+  FontWeights,
+  Spacing,
+  BorderRadius,
+  FontSizes,
+} from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginScreen() {
@@ -15,6 +30,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   const handleLogin = async () => {
     setError(null);
@@ -39,75 +55,89 @@ export default function LoginScreen() {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        
+        {/* Architectural Header */}
         <View style={styles.header}>
-          {/* Logo Mark */}
           <View style={styles.logoWrapper}>
             <View style={styles.logoCircle}>
               <Text style={styles.logoInitial}>K</Text>
             </View>
             <Text style={styles.logoBrand}>krovaa</Text>
           </View>
-
-          {/* Divider */}
-          <View style={styles.divider} />
-
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
         </View>
 
-        <View style={styles.form}>
-          {error && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
+        {error && (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={16} color={Colors.error} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
+        <View style={styles.form}>
+          {/* Email */}
           <Input
             label="Email"
             placeholder="Enter your email"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
+            containerStyle={styles.customInputContainer}
           />
 
-          {/* Password Field with Eye Toggle */}
+          {/* Password with Focus Alignment Ring */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Password</Text>
-            <View style={styles.passwordWrapper}>
+            <View style={[
+              styles.passwordWrapper, 
+              isPasswordFocused && styles.inputFieldFocused
+            ]}>
               <TextInput
                 style={styles.passwordInput}
                 placeholder="Enter your password"
-                placeholderTextColor={Colors.gray400 ?? '#9CA3AF'}
+                placeholderTextColor="#9CA3AF"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
+                onFocus={() => setIsPasswordFocused(true)}
+                onBlur={() => setIsPasswordFocused(false)}
               />
               <TouchableOpacity
                 style={styles.eyeButton}
                 onPress={() => setShowPassword((prev) => !prev)}
-                activeOpacity={0.7}
+                activeOpacity={0.5}
               >
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={Colors.gray500 ?? '#6B7280'}
+                  size={18}
+                  color="#6B7280"
                 />
               </TouchableOpacity>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.forgotPassword}>
+          {/* Forgot Password Link Placement */}
+          <TouchableOpacity
+            style={styles.forgotPassword}
+            onPress={() => router.push('/(auth)/forgot-password')}
+            activeOpacity={0.6}
+          >
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
-          <Button title="Sign In" onPress={handleLogin} loading={loading} />
+
+          <View style={{ marginTop: Spacing.xs }}>
+            <Button title="Sign In" onPress={handleLogin} loading={loading} />
+          </View>
         </View>
 
+        {/* Unified Clean Footer Area */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
           <Link href="/register" asChild>
-            <TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.6}>
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>
           </Link>
@@ -124,139 +154,149 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: 56,
+    paddingHorizontal: 24,
+    paddingTop: 64,
     paddingBottom: Spacing.xl,
   },
 
-  // ── Logo Section ──────────────────────────────────────────
+  // ── Premium Header Layout ──────────────────────────
   header: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
+    alignItems: 'flex-start',
+    marginBottom: 32,
   },
   logoWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: Spacing.lg,
+    gap: 10,
+    marginBottom: 24,
   },
   logoCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
   logoInitial: {
-    fontSize: 22,
-    fontWeight: FontWeights.extraBold as any,
+    fontSize: 18,
+    fontWeight: '800',
     color: Colors.white,
-    letterSpacing: -0.5,
   },
   logoBrand: {
-    fontSize: 28,
-    fontWeight: FontWeights.extraBold as any,
+    fontSize: 22,
+    fontWeight: '800',
     color: Colors.gray900,
-    letterSpacing: -1,
+    letterSpacing: -0.75,
   },
-  divider: {
-    width: 32,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-    marginBottom: Spacing.lg,
-    opacity: 0.25,
-  },
-
-  // ── Heading ───────────────────────────────────────────────
   title: {
-    fontSize: FontSizes.xxxl,
-    fontWeight: FontWeights.extraBold as any,
+    fontSize: 28,
+    fontWeight: '800',
     color: Colors.gray900,
-    marginBottom: Spacing.xs,
     letterSpacing: -0.5,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: FontSizes.md,
-    color: Colors.gray600,
-    fontWeight: FontWeights.regular as any,
+    fontSize: FontSizes.sm ?? 14,
+    color: Colors.gray500 ?? '#6B7280',
+    fontWeight: '400',
   },
 
-  // ── Form ─────────────────────────────────────────────────
+  // ── Form Components ─────────────────────────────────
   form: {
-    marginBottom: Spacing.xl,
+    gap: 4,
+  },
+  customInputContainer: {
+    marginBottom: 4,
   },
   errorBox: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
   },
   errorText: {
     color: Colors.error,
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.medium as any,
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   },
 
-  // ── Password with Eye ─────────────────────────────────────
+  // ── Segmented Input Group Elements ──────────────────
   inputGroup: {
-    marginBottom: Spacing.sm,
+    marginBottom: 16,
   },
   inputLabel: {
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.medium as any,
-    color: Colors.gray700 ?? '#374151',
-    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.gray800 ?? '#1F2937',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   passwordWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 16,
+    height: 52,
     borderWidth: 1,
-    borderColor: Colors.gray300 ?? '#D1D5DB',
-    borderRadius: BorderRadius.md,
+    borderColor: '#F3F4F6',
+  },
+  inputFieldFocused: {
+    borderColor: Colors.primary,
     backgroundColor: Colors.white,
-    paddingHorizontal: Spacing.md,
   },
   passwordInput: {
     flex: 1,
-    height: 48,
-    fontSize: FontSizes.md,
+    height: '100%',
+    fontSize: 15,
     color: Colors.gray900,
-    paddingRight: Spacing.sm,
+    fontWeight: '500',
   },
   eyeButton: {
-    padding: 4,
+    height: '100%',
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingLeft: 12,
   },
 
-  // ── Forgot Password ───────────────────────────────────────
+  // ── Action Link Overrides ───────────────────────────
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.lg,
+    paddingVertical: 4,
+    marginBottom: 24,
   },
   forgotPasswordText: {
     color: Colors.primary,
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.medium as any,
+    fontSize: 13,
+    fontWeight: '600',
   },
-
-  // ── Footer ────────────────────────────────────────────────
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 'auto',
+    marginTop: 40,
+    paddingBottom: 12,
   },
   footerText: {
-    fontSize: FontSizes.md,
-    color: Colors.gray600,
+    fontSize: 14,
+    color: Colors.gray500,
   },
   footerLink: {
-    fontSize: FontSizes.md,
+    fontSize: 14,
     color: Colors.primary,
-    fontWeight: FontWeights.semiBold as any,
+    fontWeight: '700',
   },
 });

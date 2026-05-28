@@ -29,44 +29,25 @@ export default function RegisterScreen() {
   const [showOtpScreen, setShowOtpScreen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const handleRegister = async () => {
     setError(null);
-
-    if (!email) {
-      setError('Please enter your email');
-      return;
-    }
-
-    if (!username.trim()) {
-      setError('Please choose a username');
-      return;
-    }
+    if (!email) { setError('Please enter your email'); return; }
+    if (!username.trim()) { setError('Please choose a username'); return; }
 
     const normalizedUsername = username.trim().toLowerCase();
     if (!/^[a-z0-9_]{3,20}$/.test(normalizedUsername)) {
       setError('Username must be 3 to 20 characters and use only letters, numbers, or underscores.');
       return;
     }
-
-    if (password !== retypePassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
+    if (password !== retypePassword) { setError('Passwords do not match.'); return; }
+    if (password.length < 6) { setError('Password must be at least 6 characters long'); return; }
 
     setLoading(true);
     try {
       const { error } = await sendRegistrationOtp(email, normalizedUsername, password, retypePassword);
-      if (error) {
-        setError(error);
-        return;
-      }
-
+      if (error) { setError(error); return; }
       setShowOtpScreen(true);
       setOtpSent(true);
     } catch (err) {
@@ -78,7 +59,6 @@ export default function RegisterScreen() {
 
   const handleVerifyOtp = async () => {
     setError(null);
-
     if (!otp || otp.length !== 6) {
       setError('Please enter a valid 6-digit OTP');
       return;
@@ -87,11 +67,7 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       const { error } = await verifyRegistrationOtp(email, otp);
-      if (error) {
-        setError(error);
-        return;
-      }
-
+      if (error) { setError(error); return; }
       router.replace('/login');
     } catch (err) {
       setError('Invalid OTP. Please try again.');
@@ -104,7 +80,6 @@ export default function RegisterScreen() {
     setError(null);
     setLoading(true);
     try {
-      // TODO: Resend OTP to email
       console.log('Resending OTP to:', email);
       setError(null);
     } catch (err) {
@@ -127,18 +102,15 @@ export default function RegisterScreen() {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        
+        {/* Architectural Header */}
         <View style={styles.header}>
-          {/* Logo Mark */}
           <View style={styles.logoWrapper}>
             <View style={styles.logoCircle}>
               <Text style={styles.logoInitial}>K</Text>
             </View>
             <Text style={styles.logoBrand}>krovaa</Text>
           </View>
-
-          {/* Divider */}
-          <View style={styles.divider} />
-
           <Text style={styles.title}>
             {showOtpScreen ? 'Verify Email' : 'Create Account'}
           </Text>
@@ -147,14 +119,15 @@ export default function RegisterScreen() {
           </Text>
         </View>
 
+        {error && (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={16} color={Colors.error} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
         {!showOtpScreen ? (
           <View style={styles.form}>
-            {error && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
-
             {/* Email */}
             <Input
               label="Email"
@@ -162,120 +135,141 @@ export default function RegisterScreen() {
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
+              containerStyle={styles.customInputContainer}
             />
 
+            {/* Username */}
             <Input
               label="Username"
               placeholder="Choose a unique username"
               value={username}
               onChangeText={(text) => setUsername(text.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
               autoCapitalize="none"
+              containerStyle={styles.customInputContainer}
             />
 
-            {/* Password Field with Eye Toggle */}
+            {/* Password */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Password</Text>
-              <View style={styles.passwordWrapper}>
+              <View style={[
+                styles.passwordWrapper, 
+                focusedField === 'password' && styles.inputFieldFocused
+              ]}>
                 <TextInput
                   style={styles.passwordInput}
                   placeholder="Create a password"
-                  placeholderTextColor={Colors.gray400 ?? '#9CA3AF'}
+                  placeholderTextColor="#9CA3AF"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
                   onPress={() => setShowPassword((prev) => !prev)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.5}
                 >
                   <Ionicons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={Colors.gray500 ?? '#6B7280'}
+                    size={18}
+                    color="#6B7280"
                   />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Confirm Password Field with Eye Toggle */}
+            {/* Confirm Password */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Confirm Password</Text>
-              <View style={styles.passwordWrapper}>
+              <View style={[
+                styles.passwordWrapper, 
+                focusedField === 'confirmPassword' && styles.inputFieldFocused
+              ]}>
                 <TextInput
                   style={styles.passwordInput}
                   placeholder="Re-enter your password"
-                  placeholderTextColor={Colors.gray400 ?? '#9CA3AF'}
+                  placeholderTextColor="#9CA3AF"
                   value={retypePassword}
                   onChangeText={setRetypePassword}
                   secureTextEntry={!showRetypePassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  onFocus={() => setFocusedField('confirmPassword')}
+                  onBlur={() => setFocusedField(null)}
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
                   onPress={() => setShowRetypePassword((prev) => !prev)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.5}
                 >
                   <Ionicons
                     name={showRetypePassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color={Colors.gray500 ?? '#6B7280'}
+                    size={18}
+                    color="#6B7280"
                   />
                 </TouchableOpacity>
               </View>
             </View>
 
-            <Button title="Create Account" onPress={handleRegister} loading={loading} />
+            <View style={{ marginTop: Spacing.md }}>
+              <Button title="Create Account" onPress={handleRegister} loading={loading} />
+            </View>
           </View>
         ) : (
           <View style={styles.form}>
-            {error && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
-
-            {/* OTP Sent Message */}
+            {/* OTP Notification Banner */}
             {otpSent && (
               <View style={styles.otpMessageBox}>
-                <Ionicons
-                  name="mail-outline"
-                  size={24}
-                  color={Colors.primary}
-                  style={{ marginBottom: Spacing.sm }}
-                />
-                <Text style={styles.otpMessageText}>
-                  We've sent a 6-digit code to:
-                </Text>
-                <Text style={styles.otpEmailText}>{email}</Text>
+                <View style={styles.otpIconCircle}>
+                  <Ionicons name="mail" size={18} color={Colors.primary} />
+                </View>
+                <View style={styles.otpMessageRight}>
+                  <Text style={styles.otpMessageText}>We sent a code verification sequence to</Text>
+                  <Text style={styles.otpEmailText}>{email}</Text>
+                </View>
               </View>
             )}
 
-            {/* OTP Input */}
+            {/* Premium Block Segments for OTP */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Enter OTP</Text>
-              <TextInput
-                style={styles.otpInput}
-                placeholder="000000"
-                placeholderTextColor={Colors.gray400 ?? '#9CA3AF'}
-                value={otp}
-                onChangeText={(text) => {
-                  // Only allow digits and limit to 6 characters
-                  const filtered = text.replace(/[^0-9]/g, '').slice(0, 6);
-                  setOtp(filtered);
-                }}
-                keyboardType="number-pad"
-                maxLength={6}
-                textAlign="center"
-              />
+              <Text style={styles.inputLabel}>Security Code</Text>
+              <View style={styles.otpContainer}>
+                {/* Hidden Core TextInput */}
+                <TextInput
+                  style={styles.absoluteHiddenInput}
+                  value={otp}
+                  onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                />
+                
+                {/* Simulated High-End UI Box Matrices */}
+                {Array.from({ length: 6 }).map((_, index) => {
+                  const digit = otp[index] || '';
+                  const isCurrent = index === otp.length;
+                  return (
+                    <View 
+                      key={index} 
+                      style={[
+                        styles.otpBoxMatrix,
+                        digit !== '' && styles.otpBoxFilled,
+                        isCurrent && styles.otpBoxActive
+                      ]}
+                    >
+                      <Text style={styles.otpBoxText}>{digit}</Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
 
             <Button title="Verify OTP" onPress={handleVerifyOtp} loading={loading} />
 
-            {/* Resend OTP */}
+            {/* Resend Actions Row */}
             <View style={styles.resendContainer}>
               <Text style={styles.resendText}>Didn't receive code? </Text>
               <TouchableOpacity onPress={handleResendOtp} disabled={loading}>
@@ -285,18 +279,15 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Back Button */}
+            {/* Back Call to Action Wrapper */}
             <TouchableOpacity
               style={styles.backButton}
               onPress={handleBackToRegister}
               disabled={loading}
+              activeOpacity={0.6}
             >
-              <Ionicons
-                name="arrow-back-outline"
-                size={20}
-                color={Colors.gray600}
-              />
-              <Text style={styles.backButtonText}>Back to Register</Text>
+              <Ionicons name="arrow-back" size={16} color={Colors.gray600} />
+              <Text style={styles.backButtonText}>Modify configuration details</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -305,7 +296,7 @@ export default function RegisterScreen() {
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account? </Text>
             <Link href="/login" asChild>
-              <TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.6}>
                 <Text style={styles.footerLink}>Sign In</Text>
               </TouchableOpacity>
             </Link>
@@ -323,186 +314,239 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: 56,
+    paddingHorizontal: 24,
+    paddingTop: 64,
     paddingBottom: Spacing.xl,
   },
 
-  // ── Logo Section ──────────────────────────────────────────
+  // ── Premium Header Layout ──────────────────────────
   header: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
+    alignItems: 'flex-start',
+    marginBottom: 32,
   },
   logoWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: Spacing.lg,
+    gap: 10,
+    marginBottom: 24,
   },
   logoCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
   logoInitial: {
-    fontSize: 22,
-    fontWeight: FontWeights.extraBold as any,
+    fontSize: 18,
+    fontWeight: '800',
     color: Colors.white,
-    letterSpacing: -0.5,
   },
   logoBrand: {
-    fontSize: 28,
-    fontWeight: FontWeights.extraBold as any,
+    fontSize: 22,
+    fontWeight: '800',
     color: Colors.gray900,
-    letterSpacing: -1,
+    letterSpacing: -0.75,
   },
-  divider: {
-    width: 32,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-    marginBottom: Spacing.lg,
-    opacity: 0.25,
-  },
-
-  // ── Heading ───────────────────────────────────────────────
   title: {
-    fontSize: FontSizes.xxxl,
-    fontWeight: FontWeights.extraBold as any,
+    fontSize: 28,
+    fontWeight: '800',
     color: Colors.gray900,
-    marginBottom: Spacing.xs,
     letterSpacing: -0.5,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: FontSizes.md,
-    color: Colors.gray600,
-    fontWeight: FontWeights.regular as any,
+    fontSize: FontSizes.sm ?? 14,
+    color: Colors.gray500 ?? '#6B7280',
+    fontWeight: '400',
   },
 
-  // ── Form ─────────────────────────────────────────────────
+  // ── Form Components ─────────────────────────────────
   form: {
-    marginBottom: Spacing.xl,
+    gap: 4,
+  },
+  customInputContainer: {
+    marginBottom: 4,
   },
   errorBox: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
   },
   errorText: {
     color: Colors.error,
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.medium as any,
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   },
 
-  // ── Password with Eye ─────────────────────────────────────
+  // ── Segmented Input Group Elements ──────────────────
   inputGroup: {
-    marginBottom: Spacing.sm,
+    marginBottom: 16,
   },
   inputLabel: {
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.medium as any,
-    color: Colors.gray700 ?? '#374151',
-    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.gray800 ?? '#1F2937',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   passwordWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 16,
+    height: 52,
     borderWidth: 1,
-    borderColor: Colors.gray300 ?? '#D1D5DB',
-    borderRadius: BorderRadius.md,
+    borderColor: '#F3F4F6',
+  },
+  inputFieldFocused: {
+    borderColor: Colors.primary,
     backgroundColor: Colors.white,
-    paddingHorizontal: Spacing.md,
   },
   passwordInput: {
     flex: 1,
-    height: 48,
-    fontSize: FontSizes.md,
+    height: '100%',
+    fontSize: 15,
     color: Colors.gray900,
-    paddingRight: Spacing.sm,
+    fontWeight: '500',
   },
   eyeButton: {
-    padding: 4,
+    height: '100%',
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingLeft: 12,
   },
 
-  // ── Footer ────────────────────────────────────────────────
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 'auto',
-  },
-  footerText: {
-    fontSize: FontSizes.md,
-    color: Colors.gray600,
-  },
-  footerLink: {
-    fontSize: FontSizes.md,
-    color: Colors.primary,
-    fontWeight: FontWeights.semiBold as any,
-  },
-
-  // ── OTP Screen ────────────────────────────────────────────
+  // ── Premium OTP Segment Blocks ──────────────────────
   otpMessageBox: {
-    backgroundColor: '#F0F9FF',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E0F2FE',
+  },
+  otpIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  otpMessageRight: {
+    flex: 1,
   },
   otpMessageText: {
-    fontSize: FontSizes.sm,
+    fontSize: 12,
     color: Colors.gray600,
-    marginBottom: 4,
   },
   otpEmailText: {
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.semiBold as any,
+    fontSize: 13,
+    fontWeight: '700',
     color: Colors.gray900,
+    marginTop: 1,
   },
-  otpInput: {
-    height: 56,
-    borderWidth: 2,
-    borderColor: Colors.gray300 ?? '#D1D5DB',
-    borderRadius: BorderRadius.md,
+  otpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 12,
+    position: 'relative',
+  },
+  absoluteHiddenInput: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    opacity: 0,
+    zIndex: 10,
+  },
+  otpBoxMatrix: {
+    width: 46,
+    height: 54,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  otpBoxFilled: {
+    borderColor: '#D1D5DB',
+    backgroundColor: '#F3F4F6',
+  },
+  otpBoxActive: {
+    borderColor: Colors.primary,
     backgroundColor: Colors.white,
-    fontSize: 24,
-    fontWeight: FontWeights.bold as any,
-    color: Colors.gray900,
-    textAlign: 'center',
-    letterSpacing: 8,
+    borderWidth: 2,
   },
+  otpBoxText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.gray900,
+  },
+
+  // ── Link Layout Actions ─────────────────────────────
   resendContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.lg,
+    marginTop: 20,
   },
   resendText: {
-    fontSize: FontSizes.sm,
-    color: Colors.gray600,
+    fontSize: 13,
+    color: Colors.gray500,
   },
   resendLink: {
-    fontSize: FontSizes.sm,
+    fontSize: 13,
     color: Colors.primary,
-    fontWeight: FontWeights.semiBold as any,
+    fontWeight: '700',
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.md,
-    gap: 8,
+    paddingVertical: 16,
+    gap: 6,
+    marginTop: 8,
   },
   backButtonText: {
-    fontSize: FontSizes.md,
+    fontSize: 13,
     color: Colors.gray600,
-    fontWeight: FontWeights.medium as any,
+    fontWeight: '600',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 40,
+    paddingBottom: 12,
+  },
+  footerText: {
+    fontSize: 14,
+    color: Colors.gray500,
+  },
+  footerLink: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '700',
   },
 });

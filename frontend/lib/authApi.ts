@@ -56,3 +56,15 @@ export async function sendRegistrationOtp(email: string, username: string, passw
 export async function verifyRegistrationOtp(email: string, otp: string) {
   return request<OtpVerifyResponse>('/api/auth/register/verify-otp', { email, otp });
 }
+
+export async function sendPasswordResetOtp(email: string) {
+  return request<OtpSendResponse>('/api/auth/forgot-password/send-otp', { email });
+}
+
+export async function verifyPasswordResetOtp(email: string, otp: string) {
+  return request<OtpSendResponse>('/api/auth/forgot-password/verify-otp', { email, otp });
+}
+
+export async function resetPassword(email: string, otp: string, newPassword: string, confirmPassword: string) {
+  return request<OtpSendResponse>('/api/auth/forgot-password/reset', { email, otp, newPassword, confirmPassword });
+}
