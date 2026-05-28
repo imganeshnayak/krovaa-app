@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
+  Alert,
+  Dimensions,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -14,16 +16,18 @@ import {
   Image,
   Animated,
 } from 'react-native';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, MoreVertical, Send, Search, Ban, Image as ImageIcon, Camera, FileText, Reply, Forward, Copy, Trash2, Star, X, Archive } from 'lucide-react-native';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
-import { BlurView } from 'expo-blur';
+import { ArrowLeft, ArrowDown, Search, Ban,
+Reply, Forward, Copy, Trash2, Star, Archive, BellOff, UserRound, CornerUpLeft
+} from 'lucide-react-native';
 import { io, Socket } from 'socket.io-client';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import type { ExtendedChatMessage } from '@/lib/chatTypes';
 import { useAuth } from '@/context/AuthContext';
 import { API_BASE_URL } from '@/lib/apiBaseUrl';
 import {
@@ -36,21 +40,16 @@ import {
   type ChatMessage,
 } from '@/lib/chatApi';
 import { getCurrentUserProfile } from '@/lib/profileApi';
-import { getConversationCache, setConversationCache, updateConversationMessages, setConversationScrollOffset } from '@/lib/chatCache';
+import { clearConversationCache, getConversationCache, getConversationsListCache, setConversationCache, setConversationsListCache, updateConversationMessages, setConversationScrollOffset } from '@/lib/chatCache';
+import MessageBubble from '@/components/MessageBubble';
+import AttachmentMenu from '@/components/AttachmentMenu';
+import ChatInputBar from '@/components/ChatInputBar';
+import ChatHeader from '@/components/ChatHeader';
 
 type MessageSender = string | { _id?: string; id?: string; fullName?: string; avatar?: string };
 type SocketAck = { error?: string; message?: ChatMessage };
 
-interface ReplyToData {
-  id: string;
-  text: string;
-  sender: { id: string; fullName: string } | null;
-  attachments: any[];
-}
-
-interface ExtendedChatMessage extends ChatMessage {
-  replyTo?: ReplyToData | null;
-}
+// Use shared ExtendedChatMessage from lib/chatTypes
 
 function getSenderId(sender: MessageSender | undefined) {
   if (!sender) return '';
@@ -72,7 +71,7 @@ function appendUniqueMessage(messages: ExtendedChatMessage[], nextMessage: Exten
   return [...messages, nextMessage];
 }
 
-function getFileIcon(fileName: string, type: string): { icon: string; label: string } {
+function getFileIcon(fileName: string, type?: string): { icon: string; label: string } {
   const lowerFileName = fileName.toLowerCase();
   if (type === 'audio' || lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) {
     return { icon: '🎵', label: 'Audio' };
@@ -125,6 +124,8 @@ function formatMessageDate(dateStr?: string) {
 }
 
 export default function ChatDetailScreen() {
+  const { height: screenHeight } = Dimensions.get('window');
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string }>();
   const { session } = useAuth();
   const scrollViewRef = useRef<ScrollView | null>(null);
@@ -132,14 +133,32 @@ export default function ChatDetailScreen() {
   const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageLayoutsRef = useRef<Record<string, number>>({});
+  const typingDotAnims = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]);
+  const [isParticipantTyping, setIsParticipantTyping] = useState(false);
+
+  useEffect(() => {
+    if (!isParticipantTyping) return;
+    const anims = typingDotAnims.current.map((val, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 180),
+          Animated.timing(val, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0, duration: 300, useNativeDriver: true }),
+          Animated.delay(600),
+        ])
+      )
+    );
+    anims.forEach((a) => a.start());
+    return () => anims.forEach((a) => a.reset());
+  }, [isParticipantTyping]);
+
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isParticipantTyping, setIsParticipantTyping] = useState(false);
-  const [composerHeight, setComposerHeight] = useState(44);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<{ url: string; type: string } | null>(null);
   const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
@@ -148,12 +167,19 @@ export default function ChatDetailScreen() {
   const [forwardModalVisible, setForwardModalVisible] = useState(false);
   const [forwardConversations, setForwardConversations] = useState<ChatConversation[]>([]);
   const [forwardSourceMessages, setForwardSourceMessages] = useState<ExtendedChatMessage[]>([]);
+  const [forwardSearchText, setForwardSearchText] = useState('');
+  const [selectedForwardConversationIds, setSelectedForwardConversationIds] = useState<string[]>([]);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [mediaVisible, setMediaVisible] = useState(false);
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
+  const [isMutedNotifications, setIsMutedNotifications] = useState(false);
+  const [imageAspectRatios, setImageAspectRatios] = useState<Record<string, number>>({});
+
+  const [contextMessage, setContextMessage] = useState<ExtendedChatMessage | null>(null);
+  const [contextMenuY, setContextMenuY] = useState(0);
 
   const conversationId = String(params.id ?? '');
   const currentUserId = session?.user.id ?? '';
@@ -182,7 +208,31 @@ export default function ChatDetailScreen() {
     return blockedUsers.includes(participant.id);
   }, [blockedUsers, participant?.id]);
 
+  const syncConversationAsRead = useCallback(() => {
+    const cachedList = getConversationsListCache();
+    if (!cachedList?.conversations?.length) return;
+
+    const nextConversations = cachedList.conversations.map((conversation: any) =>
+      conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
+    );
+
+    setConversationsListCache({ conversations: nextConversations });
+  }, [conversationId]);
+
   const selectionModeActive = selectedMessages.length > 0;
+
+  const forwardConversationResults = useMemo(() => {
+    const query = forwardSearchText.trim().toLowerCase();
+    return [...forwardConversations]
+      .sort((left, right) => new Date(right.lastMessageAt || 0).getTime() - new Date(left.lastMessageAt || 0).getTime())
+      .filter((conversation) => {
+        if (!query) return true;
+        const other = conversation.participants.find((participantItem) => participantItem.id !== currentUserId) ?? conversation.participants[0];
+        return Boolean(other?.fullName?.toLowerCase().includes(query) || other?.username?.toLowerCase().includes(query));
+      });
+  }, [currentUserId, forwardConversations, forwardSearchText]);
+
+  const recentForwardConversations = useMemo(() => forwardConversationResults.slice(0, 6), [forwardConversationResults]);
 
   const isMessageSelected = useCallback(
     (id: string) => selectedMessages.includes(id),
@@ -191,6 +241,14 @@ export default function ChatDetailScreen() {
 
   const clearSelection = useCallback(() => {
     setSelectedMessages([]);
+  }, []);
+
+  const toggleForwardConversationSelection = useCallback((conversationId: string) => {
+    setSelectedForwardConversationIds((previous) =>
+      previous.includes(conversationId)
+        ? previous.filter((item) => item !== conversationId)
+        : [...previous, conversationId]
+    );
   }, []);
 
   const toggleMessageSelection = useCallback((id: string) => {
@@ -274,6 +332,7 @@ export default function ChatDetailScreen() {
           try {
             if (session?.access_token) {
               markConversationRead(session.access_token, conversationId).catch(() => null);
+              syncConversationAsRead();
             }
           } catch {}
         }
@@ -314,7 +373,9 @@ export default function ChatDetailScreen() {
       setMessages((previousMessages) => previousMessages.filter((message) => message.id !== id));
     });
 
-    socket.on('conversationRead', () => {});
+    socket.on('conversationRead', () => {
+      syncConversationAsRead();
+    });
 
     socket.on('typing', ({ userId, isTyping }) => {
       if (userId === currentUserId) return;
@@ -361,25 +422,16 @@ export default function ChatDetailScreen() {
     });
   };
 
-  const panRefs = useRef<Record<string, any>>({});
-
-  function ensurePanValue(id: string) {
-    if (!panRefs.current[id]) panRefs.current[id] = new Animated.Value(0);
-    return panRefs.current[id];
-  }
-
   const handleReplyTriggered = (message: ExtendedChatMessage) => {
     clearSelection();
     setReplyToMessage(message);
     inputRef.current?.focus();
   };
 
-  const handleLongPress = (message: ExtendedChatMessage) => {
-    if (selectionModeActive) {
-      toggleMessageSelection(message.id);
-      return;
-    }
-    enterSelectionMode(message.id);
+  const handleLongPress = (message: ExtendedChatMessage, event: any) => {
+    const pageY = event?.nativeEvent?.pageY ?? 0;
+    setContextMessage(message);
+    setContextMenuY(pageY);
   };
 
   const copyMessage = async (messagesToCopy: ExtendedChatMessage[]) => {
@@ -417,28 +469,38 @@ export default function ChatDetailScreen() {
     clearSelection();
     setForwardSourceMessages(messagesToForward);
     setForwardModalVisible(true);
+    setForwardSearchText('');
+    setSelectedForwardConversationIds([]);
     try {
       if (!session?.access_token) return;
       const res = await getConversations(session.access_token);
       if (res?.data?.conversations) {
-        setForwardConversations(res.data.conversations.filter((c) => c.id !== conversationId));
+        setForwardConversations(
+          [...res.data.conversations]
+            .filter((c) => c.id !== conversationId)
+            .sort((left, right) => new Date(right.lastMessageAt || 0).getTime() - new Date(left.lastMessageAt || 0).getTime())
+        );
       }
     } catch (err) {}
   };
 
-  const handleForwardTo = async (targetConversationId: string) => {
-    if (!session?.access_token || !forwardSourceMessages.length) return;
+  const handleForwardSelected = async () => {
+    if (!session?.access_token || !forwardSourceMessages.length || !selectedForwardConversationIds.length) return;
     try {
+      const targetIds = selectedForwardConversationIds.slice();
       for (const sourceMessage of forwardSourceMessages) {
-        const res = await apiForwardMessage(session.access_token, conversationId, sourceMessage.id, targetConversationId);
-        if (res?.error) {
-          setError(res.error);
-          return;
+        for (const targetConversationId of targetIds) {
+          const res = await apiForwardMessage(session.access_token, conversationId, sourceMessage.id, targetConversationId);
+          if (res?.error) {
+            setError(res.error);
+            return;
+          }
         }
       }
-      alert('Message forwarded');
+      Alert.alert('Message forwarded', `Sent to ${targetIds.length} conversation${targetIds.length > 1 ? 's' : ''}.`);
       setForwardModalVisible(false);
       setForwardSourceMessages([]);
+      setSelectedForwardConversationIds([]);
     } catch (err: any) {
       setError(err?.message || 'Forward failed');
     }
@@ -459,6 +521,37 @@ export default function ChatDetailScreen() {
     } catch (err: any) {
       setError(err?.message || 'Delete failed');
     }
+  };
+
+  const handleViewProfile = () => {
+    setMenuVisible(false);
+    if (participant?.id) {
+      router.push({ pathname: '/profile/[id]', params: { id: String(participant.id), fromChat: 'true' } });
+    } else {
+      router.push('/(tabs)/profile');
+    }
+  };
+
+  const handleToggleMuteNotifications = () => {
+    setIsMutedNotifications((previous) => !previous);
+    setMenuVisible(false);
+    Alert.alert(isMutedNotifications ? 'Notifications unmuted' : 'Notifications muted');
+  };
+
+  const handleClearConversation = () => {
+    Alert.alert('Clear conversation', 'This clears the chat locally on this device.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: () => {
+          clearConversationCache(conversationId);
+          updateConversationMessages(conversationId, []);
+          setMessages([]);
+          setMenuVisible(false);
+        },
+      },
+    ]);
   };
 
   const handleDeleteSelectedMessages = async () => {
@@ -588,19 +681,22 @@ export default function ChatDetailScreen() {
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsMultipleSelection: true,
+        selectionLimit: 10,
         quality: 0.8,
       });
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const fileName = asset.fileName || asset.uri.split('/').pop() || 'attachment';
-        const lowerFileName = fileName.toLowerCase();
-        let fileType: 'image' | 'video' | 'audio' | 'file' = 'image';
-        if (asset.type === 'video' || lowerFileName.match(/\.(mp4|mov|avi|mkv|flv|wmv|webm)$/i)) {
-          fileType = 'video';
-        } else if (lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) {
-          fileType = 'audio';
+      if (!result.canceled && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const fileName = asset.fileName || asset.uri.split('/').pop() || 'attachment';
+          const lowerFileName = fileName.toLowerCase();
+          let fileType: 'image' | 'video' | 'audio' | 'file' = 'image';
+          if (asset.type === 'video' || lowerFileName.match(/\.(mp4|mov|avi|mkv|flv|wmv|webm)$/i)) {
+            fileType = 'video';
+          } else if (lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) {
+            fileType = 'audio';
+          }
+          await sendAttachment(asset.uri, fileType, fileName);
         }
-        await sendAttachment(asset.uri, fileType, fileName);
       }
     } catch (err) {
       setError('Failed to pick from gallery.');
@@ -636,17 +732,19 @@ export default function ChatDetailScreen() {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
         copyToCacheDirectory: true,
+        multiple: true,
       });
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        const fileUri = asset.uri;
-        const fileName = asset.name || 'document';
-        const lowerFileName = fileName.toLowerCase();
-        let fileType: 'image' | 'video' | 'audio' | 'file' = 'file';
-        if (lowerFileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)) fileType = 'image';
-        else if (lowerFileName.match(/\.(mp4|mov|avi|mkv|flv|wmv|webm)$/i)) fileType = 'video';
-        else if (lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) fileType = 'audio';
-        await sendAttachment(fileUri, fileType, fileName);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const fileUri = asset.uri;
+          const fileName = asset.name || 'document';
+          const lowerFileName = fileName.toLowerCase();
+          let fileType: 'image' | 'video' | 'audio' | 'file' = 'file';
+          if (lowerFileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)) fileType = 'image';
+          else if (lowerFileName.match(/\.(mp4|mov|avi|mkv|flv|wmv|webm)$/i)) fileType = 'video';
+          else if (lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) fileType = 'audio';
+          await sendAttachment(fileUri, fileType, fileName);
+        }
       }
     } catch (err) {
       setError('Failed to pick file.');
@@ -822,118 +920,39 @@ export default function ChatDetailScreen() {
     );
   }
 
+  const handleMessagePress = useCallback((message: ExtendedChatMessage) => {
+    if (selectionModeActive) toggleMessageSelection(message.id);
+  }, [selectionModeActive, toggleMessageSelection]);
+
+  const handleImageLoad = useCallback((url: string, width: number, height: number) => {
+    setImageAspectRatios((previous) => ({
+      ...previous,
+      [url]: width / height,
+    }));
+  }, []);
+
+  const handleAttachmentPress = useCallback((attachment: any) => {
+    setError(null);
+    setSelectedAttachment(attachment);
+  }, []);
+
   const renderMessageBubble = (message: ExtendedChatMessage) => {
-    const isMine = getSenderId(message.sender as MessageSender) === currentUserId;
-    const hasAttachments = message.attachments && message.attachments.length > 0;
-    const pan = ensurePanValue(message.id);
-    const forwarded = isForwardedMessage(message);
-    const messageSelected = isMessageSelected(message.id);
-    const replyTo = message.replyTo as ReplyToData | null | undefined;
-
-    const onGestureEvent = Animated.event(
-      [{ nativeEvent: { translationX: pan } }],
-      { useNativeDriver: true }
-    );
-
-    const onHandlerStateChange = ({ nativeEvent }: any) => {
-      if (nativeEvent.state !== State.END && nativeEvent.oldState !== State.ACTIVE) return;
-      const translationX = nativeEvent.translationX ?? 0;
-      if (translationX > 70) {
-        handleReplyTriggered(message);
-      } else if (translationX < -70) {
-        openForwardModal([message]);
-      }
-      Animated.timing(pan, {
-        toValue: 0,
-        duration: 90,
-        useNativeDriver: true,
-      }).start();
-    };
-
     return (
-      <PanGestureHandler key={message.id} onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange} activeOffsetX={[-10, 10]}>
-        <Animated.View style={[styles.messageRow, isMine ? styles.messageRowRight : styles.messageRowLeft, { transform: [{ translateX: pan }] }]}>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onLongPress={() => handleLongPress(message)}
-            onPress={() => {
-              if (selectionModeActive) toggleMessageSelection(message.id);
-            }}
-          >
-            <View style={[styles.bubble, isMine ? styles.myBubble : styles.theirBubble, messageSelected ? styles.selectedBubble : null]}>
-              {forwarded && (
-                <View style={styles.forwardedRow}>
-                  <Forward size={11} color={Colors.gray500} />
-                  <Text style={styles.forwardedText}>Forwarded</Text>
-                </View>
-              )}
-
-              {replyTo && (
-                <TouchableOpacity
-                  style={styles.repliedMessageCard}
-                  activeOpacity={0.7}
-                  onPress={() => scrollToMessage(replyTo.id)}
-                >
-                  <View style={styles.replyAccent} />
-                  <View style={styles.repliedMessageBody}>
-                    <Text style={styles.repliedMessageAuthor}>
-                      {replyTo.sender?.fullName ?? 'Reply'}
-                    </Text>
-                    <Text
-                      style={styles.repliedMessageText}
-                      numberOfLines={1}
-                    >
-                      {replyTo.text || 'Attachment'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-
-              {hasAttachments && (
-                <View style={styles.attachmentsContainer} pointerEvents={selectionModeActive ? 'none' : 'auto'}>
-                  {message.attachments.map((attachment, idx) => {
-                    const fileName = attachment.url?.split('/').pop() || `attachment-${idx}`;
-                    const fileInfo = getFileIcon(fileName, attachment.type);
-                    return (
-                      <TouchableOpacity
-                        key={idx}
-                        style={styles.attachmentItem}
-                        onPress={() => {
-                          setError(null);
-                          setSelectedAttachment(attachment);
-                        }}
-                      >
-                        {attachment.type === 'image' && (
-                          <Image source={{ uri: attachment.url }} style={styles.attachmentImage} />
-                        )}
-                        {attachment.type !== 'image' && (
-                          <View style={[styles.attachmentPlaceholder, { backgroundColor: getAttachmentColor(attachment.type) }]}>
-                            <Text style={styles.attachmentPlaceholderText}>{fileInfo.icon}</Text>
-                            <Text style={styles.attachmentPlaceholderLabel}>{fileInfo.label}</Text>
-                            {fileName && <Text style={styles.attachmentFileName}>{fileName.substring(0, 12)}</Text>}
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-
-              {message.text && (
-                <Text style={[styles.messageText, isMine ? styles.myMessageText : styles.theirMessageText]}>
-                  {message.text}
-                </Text>
-              )}
-
-              <View style={styles.messageFooter}>
-                <Text style={[styles.messageTime, isMine ? styles.myMessageTime : styles.theirMessageTime]}>
-                  {formatTime(message.createdAt)}
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-      </PanGestureHandler>
+      <MessageBubble
+        key={message.id}
+        message={message}
+        currentUserId={currentUserId}
+        selectionModeActive={selectionModeActive}
+        isMessageSelected={isMessageSelected}
+        onLongPress={handleLongPress}
+        onPress={handleMessagePress}
+        onReplyTriggered={handleReplyTriggered}
+        onScrollToMessage={scrollToMessage}
+        formatTime={formatTime}
+        imageAspectRatios={imageAspectRatios}
+        onImageLoad={handleImageLoad}
+        onAttachmentPress={handleAttachmentPress}
+      />
     );
   };
 
@@ -970,49 +989,48 @@ export default function ChatDetailScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.select({ ios: 'padding', android: 'height' })}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backIconButton} onPress={() => router.back()}>
-          <ArrowLeft size={20} color={Colors.gray900} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerCenter} activeOpacity={0.7}>
-          <Image source={{ uri: participant?.avatar }} style={styles.headerAvatar} />
-          <View>
-            <Text style={styles.headerName} numberOfLines={1}>
-              {participant?.fullName ?? 'Conversation'}
-            </Text>
-            <Text style={styles.headerMeta} numberOfLines={1}>
-              {isParticipantTyping ? (
-                <Text style={styles.typingStatusText}>typing...</Text>
-              ) : (
-                participant?.username ? `@${participant.username}` : participant?.email ?? 'Active now'
-              )}
-            </Text>
-          </View>
-        </TouchableOpacity>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton} onPress={toggleMenu}>
-            <MoreVertical size={18} color={Colors.gray900} />
-          </TouchableOpacity>
-        </View>
-      </View>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeContainer}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+      <ChatHeader
+        userName={participant?.fullName ?? 'Conversation'}
+        userHandle={participant?.username ? `@${participant.username}` : participant?.email}
+        profileImageUri={participant?.avatar}
+        userId={participant?.id}
+        isTyping={isParticipantTyping}
+        onMenuPress={toggleMenu}
+      />
 
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={toggleMenu}>
         <Pressable style={styles.modalOverlay} onPress={toggleMenu}>
           <View style={styles.menuDropdown}>
             <TouchableOpacity
               style={styles.menuOption}
-              onPress={() => { setMenuVisible(false); setSearchVisible(true); }}
+              onPress={handleViewProfile}
             >
-              <Search size={18} color={Colors.gray700} />
-              <Text style={styles.menuOptionText}>Search</Text>
+              <UserRound size={18} color={Colors.gray700} />
+              <Text style={styles.menuOptionText}>View Profile</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.menuOption}
-              onPress={() => { setMenuVisible(false); setMediaVisible(true); }}
+              onPress={() => { setMenuVisible(false); setSearchVisible(true); }}
             >
-              <ImageIcon size={18} color={Colors.gray700} />
-              <Text style={styles.menuOptionText}>Media</Text>
+              <Search size={18} color={Colors.gray700} />
+              <Text style={styles.menuOptionText}>Search Chat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuOption}
+              onPress={handleToggleMuteNotifications}
+            >
+              <BellOff size={18} color={Colors.gray700} />
+              <Text style={styles.menuOptionText}>{isMutedNotifications ? 'Unmute Notifications' : 'Mute Notifications'}</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuOption}
+              onPress={handleClearConversation}
+            >
+              <Trash2 size={18} color={Colors.gray700} />
+              <Text style={styles.menuOptionText}>Clear Conversation</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
             <TouchableOpacity
@@ -1028,76 +1046,65 @@ export default function ChatDetailScreen() {
         </Pressable>
       </Modal>
 
-      {selectionModeActive && (
-        <BlurView intensity={24} tint="light" style={styles.selectionToolbar}>
-          <View style={styles.selectionToolbarContent}>
-            <TouchableOpacity onPress={clearSelection} style={styles.selectionToolbarClose} activeOpacity={0.7}>
-              <X size={18} color={Colors.gray900} />
-            </TouchableOpacity>
-            <View style={styles.selectionToolbarTitleWrap}>
-              <Text style={styles.selectionToolbarTitle}>{selectedMessages.length} selected</Text>
-            </View>
-            <View style={styles.selectionToolbarActions}>
-              {selectedMessages.length === 1 && (
-                <TouchableOpacity onPress={handleReplyFromSelection} style={styles.selectionToolbarButton} activeOpacity={0.7}>
-                  <Reply size={18} color={Colors.gray900} />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={() => openForwardModal(messages.filter((message) => selectedMessages.includes(message.id)))} style={styles.selectionToolbarButton} activeOpacity={0.7}>
-                <Forward size={18} color={Colors.gray900} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleCopySelectedMessages} style={styles.selectionToolbarButton} activeOpacity={0.7}>
-                <Copy size={18} color={Colors.gray900} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDeleteSelectedMessages} style={styles.selectionToolbarButton} activeOpacity={0.7}>
-                <Trash2 size={18} color="#EF4444" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleToggleSelectedStars} style={styles.selectionToolbarButton} activeOpacity={0.7}>
-                <Star size={18} color={Colors.gray900} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </BlurView>
-      )}
+      <View style={styles.feedWrapper}>
+        <Pressable style={styles.messagesSurface} onPress={selectionModeActive ? clearSelection : undefined}>
+          <ScrollView
+            ref={scrollViewRef}
+            contentContainerStyle={styles.messages}
+            showsVerticalScrollIndicator={false}
+            style={styles.messagesScrollView}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            removeClippedSubviews={true}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              try {
+                const y = e.nativeEvent.contentOffset.y;
+                const h = e.nativeEvent.contentSize.height - e.nativeEvent.layoutMeasurement.height;
+                setShowScrollToBottom(y < h - 120);
+                setConversationScrollOffset(conversationId, y);
+              } catch {}
+            }}
+          >
+            {messages.length === 0 ? (
+              <View style={styles.emptyConversationState}>
+                <Text style={styles.emptyConversationTitle}>No messages yet</Text>
+                <Text style={styles.emptyConversationText}>Send the first message to start the conversation.</Text>
+              </View>
+            ) : (
+              renderMessages()
+            )}
 
-      <Pressable style={styles.messagesSurface} onPress={selectionModeActive ? clearSelection : undefined}>
-        <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={styles.messages}
-          showsVerticalScrollIndicator={false}
-          style={styles.messagesScrollView}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          scrollEventThrottle={16}
-          onScroll={(e) => {
-            try {
-              const y = e.nativeEvent.contentOffset.y;
-              setConversationScrollOffset(conversationId, y);
-            } catch {}
-          }}
-        >
-          {messages.length === 0 ? (
-            <View style={styles.emptyConversationState}>
-              <Text style={styles.emptyConversationTitle}>No messages yet</Text>
-              <Text style={styles.emptyConversationText}>Send the first message to start the conversation.</Text>
-            </View>
-          ) : (
-            renderMessages()
-          )}
-
-          {isParticipantTyping && (
-            <View style={styles.typingRow}>
-              <View style={styles.typingBubble}>
-                <View style={styles.typingDots}>
-                  <View style={styles.typingDot} />
-                  <View style={styles.typingDot} />
-                  <View style={styles.typingDot} />
+            {isParticipantTyping && (
+              <View style={styles.typingRow}>
+                <View style={styles.typingBubble}>
+                  <View style={styles.typingDots}>
+                    {typingDotAnims.current.map((anim, i) => (
+                      <Animated.View
+                        key={i}
+                        style={[
+                          styles.typingDot,
+                          { opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) },
+                        ]}
+                      />
+                    ))}
+                  </View>
                 </View>
               </View>
-            </View>
-          )}
-        </ScrollView>
-      </Pressable>
+            )}
+          </ScrollView>
+        </Pressable>
+
+        {showScrollToBottom && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.scrollToBottom}
+            onPress={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+          >
+            <ArrowDown size={18} color="#64748B" />
+          </TouchableOpacity>
+        )}
+      </View>
 
       {isParticipantBlocked ? (
         <View style={styles.blockedBanner}>
@@ -1111,107 +1118,169 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <BlurView intensity={24} tint="light" style={styles.composerShell}>
-          {replyToMessage && (
-            <View style={styles.replyPreview}>
-              <View style={styles.replyPreviewAccent} />
-              <View style={styles.replyPreviewBody}>
-                <Text style={styles.replyPreviewAuthor}>
-                  {(replyToMessage.sender as any)?.fullName ?? 'Reply'}
-                </Text>
-                <Text style={styles.replyPreviewText} numberOfLines={1}>
-                  {getReplyPreviewLabel(replyToMessage)}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setReplyToMessage(null)} style={styles.replyCancel}>
-                <X size={18} color={Colors.gray500} />
-              </TouchableOpacity>
-            </View>
-          )}
-          <View style={styles.composer}>
-            <TouchableOpacity style={styles.attachButton} onPress={() => setAttachmentModalVisible(true)} activeOpacity={0.7}>
-              <Text style={styles.attachText}>+</Text>
-            </TouchableOpacity>
-            <TextInput
-              ref={inputRef}
-              placeholder="Write a message"
-              placeholderTextColor={Colors.gray500}
-              style={[styles.input, { height: Math.min(Math.max(composerHeight, 44), 100) }]}
-              value={newMessage}
-              onChangeText={handleMessageChange}
-              onBlur={() => emitTypingState(false)}
-              onSubmitEditing={sendMessage}
-              multiline
-              textAlignVertical="center"
-              returnKeyType="send"
-              onContentSizeChange={(event) => {
-                const nextHeight = event.nativeEvent.contentSize.height + 6;
-                setComposerHeight(Math.min(Math.max(nextHeight, 44), 100));
-              }}
-            />
-            <TouchableOpacity style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]} onPress={sendMessage} activeOpacity={0.7}>
-              <Send size={18} color={newMessage.trim() ? Colors.white : 'rgba(255,255,255,0.5)'} />
-            </TouchableOpacity>
-          </View>
-        </BlurView>
+        <ChatInputBar
+          newMessage={newMessage}
+          handleMessageChange={handleMessageChange}
+          sendMessage={sendMessage}
+          replyToMessage={replyToMessage}
+          setReplyToMessage={setReplyToMessage}
+          inputRef={inputRef}
+          getReplyPreviewLabel={getReplyPreviewLabel}
+          setAttachmentModalVisible={setAttachmentModalVisible}
+          bottomInset={insets.bottom}
+        />
       )}
 
-      <Modal visible={attachmentModalVisible} transparent animationType="fade" onRequestClose={() => setAttachmentModalVisible(false)}>
+      <Modal visible={attachmentModalVisible} transparent animationType="slide" onRequestClose={() => setAttachmentModalVisible(false)}>
         <Pressable style={styles.attachmentOverlay} onPress={() => setAttachmentModalVisible(false)}>
-          <Pressable style={styles.attachmentSheet} onPress={() => undefined}>
-            <Text style={styles.attachmentTitle}>Add Attachment</Text>
-            <TouchableOpacity style={styles.attachmentOption} onPress={pickFromGallery}>
-              <View style={styles.attachmentIconContainer}>
-                <ImageIcon size={24} color={Colors.primary} />
-              </View>
-              <View style={styles.attachmentOptionContent}>
-                <Text style={styles.attachmentOptionTitle}>Gallery</Text>
-                <Text style={styles.attachmentOptionDescription}>Choose photos or videos from your gallery</Text>
-              </View>
+          <AttachmentMenu
+            onSelect={(type) => {
+              if (type === 'gallery') pickFromGallery();
+              else if (type === 'camera') pickFromCamera();
+              else if (type === 'document') pickDocument();
+            }}
+            onClose={() => setAttachmentModalVisible(false)}
+          />
+        </Pressable>
+      </Modal>
+
+      {/* Instagram-style floating context menu */}
+      <Modal visible={!!contextMessage} transparent animationType="fade" onRequestClose={() => setContextMessage(null)}>
+        <Pressable style={styles.contextOverlay} onPress={() => setContextMessage(null)}>
+          <View style={[styles.contextMenu, { top: Math.min(contextMenuY, screenHeight - 240) }]}>
+            <TouchableOpacity
+              style={styles.contextMenuItem}
+              onPress={() => {
+                if (contextMessage) handleReplyTriggered(contextMessage);
+                setContextMessage(null);
+              }}
+            >
+              <CornerUpLeft size={18} color={Colors.gray700} />
+              <Text style={styles.contextMenuText}>Reply</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.attachmentOption} onPress={pickFromCamera}>
-              <View style={styles.attachmentIconContainer}>
-                <Camera size={24} color={Colors.primary} />
-              </View>
-              <View style={styles.attachmentOptionContent}>
-                <Text style={styles.attachmentOptionTitle}>Camera</Text>
-                <Text style={styles.attachmentOptionDescription}>Take a photo or video</Text>
-              </View>
+            <View style={styles.contextMenuDivider} />
+            <TouchableOpacity
+              style={styles.contextMenuItem}
+              onPress={() => {
+                if (contextMessage) copyMessage([contextMessage]);
+                setContextMessage(null);
+              }}
+            >
+              <Copy size={18} color={Colors.gray700} />
+              <Text style={styles.contextMenuText}>Copy</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.attachmentOption} onPress={pickDocument}>
-              <View style={styles.attachmentIconContainer}>
-                <FileText size={24} color={Colors.primary} />
-              </View>
-              <View style={styles.attachmentOptionContent}>
-                <Text style={styles.attachmentOptionTitle}>Documents</Text>
-                <Text style={styles.attachmentOptionDescription}>Choose a file from your device</Text>
-              </View>
+            <View style={styles.contextMenuDivider} />
+            <TouchableOpacity
+              style={styles.contextMenuItem}
+              onPress={() => {
+                if (contextMessage) openForwardModal([contextMessage]);
+                setContextMessage(null);
+              }}
+            >
+              <Forward size={18} color={Colors.gray700} />
+              <Text style={styles.contextMenuText}>Forward</Text>
             </TouchableOpacity>
-          </Pressable>
+            <View style={styles.contextMenuDivider} />
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={async () => {
+                  if (contextMessage) {
+                    const msg = contextMessage;
+                    setContextMessage(null);
+                    Alert.alert('Delete Message', 'Are you sure you want to delete this message?', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => handleDeleteMessage(msg) },
+                    ]);
+                  }
+                }}
+              >
+              <Trash2 size={18} color="#EF4444" />
+              <Text style={[styles.contextMenuText, { color: '#EF4444' }]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         </Pressable>
       </Modal>
 
       <Modal visible={forwardModalVisible} transparent animationType="slide" onRequestClose={() => setForwardModalVisible(false)}>
         <View style={styles.attachmentOverlay}>
-          <View style={[styles.attachmentSheet, { maxHeight: '70%' }]}>
+          <View style={[styles.attachmentSheet, styles.forwardSheet]}>
+            <View style={styles.sheetHandle} />
             <Text style={styles.attachmentTitle}>Forward to</Text>
-            <ScrollView>
-              {forwardConversations.map((convo) => {
-                const other = convo.participants.find((p) => p.id !== (session?.user.id ?? '')) ?? convo.participants[0];
-                return (
-                  <TouchableOpacity key={convo.id} style={styles.attachmentOption} onPress={() => handleForwardTo(convo.id)}>
-                    <Image source={{ uri: other.avatar }} style={{ width: 40, height: 40, borderRadius: 8, marginRight: Spacing.md }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontWeight: '600', color: Colors.gray900 }}>{other.fullName}</Text>
-                      <Text style={{ color: Colors.gray600 }}>{convo.lastMessage}</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={styles.forwardSearchSticky}>
+              <TextInput
+                placeholder="Search contacts..."
+                placeholderTextColor={Colors.gray500}
+                style={styles.forwardSearchInput}
+                value={forwardSearchText}
+                onChangeText={setForwardSearchText}
+                autoFocus
+              />
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.forwardSectionLabel}>Recent Chats</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.forwardRecentRow}>
+                {recentForwardConversations.map((conversationItem) => {
+                  const other = conversationItem.participants.find((participantItem) => participantItem.id !== (session?.user.id ?? '')) ?? conversationItem.participants[0];
+                  const selected = selectedForwardConversationIds.includes(conversationItem.id);
+                  return (
+                    <TouchableOpacity
+                      key={conversationItem.id}
+                      style={[styles.forwardRecentCard, selected && styles.forwardRecentCardSelected]}
+                      onPress={() => toggleForwardConversationSelection(conversationItem.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Image source={{ uri: other.avatar }} style={styles.forwardRecentAvatar} />
+                      <Text style={styles.forwardRecentName} numberOfLines={1}>{other.fullName}</Text>
+                      <View style={[styles.forwardCheckChip, selected && styles.forwardCheckChipSelected]}>
+                        <Text style={styles.forwardCheckChipText}>{selected ? '✓' : '+'}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <Text style={styles.forwardSectionLabel}>All Contacts</Text>
+              <View style={styles.forwardList}>
+                {forwardConversationResults.map((conversationItem) => {
+                  const other = conversationItem.participants.find((participantItem) => participantItem.id !== (session?.user.id ?? '')) ?? conversationItem.participants[0];
+                  const selected = selectedForwardConversationIds.includes(conversationItem.id);
+                  return (
+                    <TouchableOpacity
+                      key={conversationItem.id}
+                      style={[styles.forwardListItem, selected && styles.forwardListItemSelected]}
+                      onPress={() => toggleForwardConversationSelection(conversationItem.id)}
+                      activeOpacity={0.75}
+                    >
+                      <Image source={{ uri: other.avatar }} style={styles.forwardListAvatar} />
+                      <View style={styles.forwardListBody}>
+                        <Text style={styles.forwardListTitle} numberOfLines={1}>{other.fullName}</Text>
+                        <Text style={styles.forwardListSubtitle} numberOfLines={1}>{conversationItem.lastMessage || 'No recent messages'}</Text>
+                      </View>
+                      <View style={[styles.forwardCheckMark, selected && styles.forwardCheckMarkSelected]}>
+                        <Text style={styles.forwardCheckMarkText}>{selected ? '✓' : ''}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </ScrollView>
-            <TouchableOpacity style={[styles.blockButton, { marginTop: Spacing.md }]} onPress={() => setForwardModalVisible(false)}>
-              <Text style={styles.blockCancelText}>Cancel</Text>
-            </TouchableOpacity>
+
+            <View style={styles.forwardFooter}>
+              <TouchableOpacity style={styles.forwardCancelButton} onPress={() => setForwardModalVisible(false)} activeOpacity={0.8}>
+                <Text style={styles.forwardCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.forwardSendButton, !selectedForwardConversationIds.length && styles.forwardSendButtonDisabled]}
+                onPress={handleForwardSelected}
+                disabled={!selectedForwardConversationIds.length}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.forwardSendText}>
+                  Send{selectedForwardConversationIds.length ? ` (${selectedForwardConversationIds.length})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1324,7 +1393,7 @@ export default function ChatDetailScreen() {
                         style={styles.mediaGridItem}
                         onPress={() => {
                           setMediaVisible(false);
-                          setSelectedAttachment(attachment);
+                          setSelectedAttachment({ url: attachment.url, type: attachment.type ?? 'file' });
                         }}
                       >
                         {attachment.type === 'image' ? (
@@ -1378,70 +1447,58 @@ export default function ChatDetailScreen() {
         </Pressable>
       </Modal>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F7F8FC',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 56,
-    paddingBottom: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
-    zIndex: 10,
-  },
-  backIconButton: {
-    padding: 4,
-  },
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginHorizontal: Spacing.sm,
-  },
-  headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.full,
-    marginRight: 10,
-  },
-  headerName: {
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.semiBold as any,
-    color: Colors.gray900,
-  },
-  headerMeta: {
-    fontSize: FontSizes.xs,
-    color: Colors.gray500,
-    marginTop: 2,
-  },
-  typingStatusText: {
-    color: Colors.primary,
-    fontStyle: 'italic',
-    fontWeight: FontWeights.medium as any,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  contextOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.3)',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
+  contextMenu: {
+    position: 'absolute',
+    width: '70%',
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  contextMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  contextMenuText: {
+    fontSize: FontSizes.md,
+    color: Colors.gray800,
+    fontWeight: FontWeights.medium as any,
+  },
+  contextMenuDivider: {
+    height: 1,
+    backgroundColor: Colors.gray100,
+    marginHorizontal: 14,
   },
   menuDropdown: {
     position: 'absolute',
@@ -1449,13 +1506,14 @@ const styles = StyleSheet.create({
     right: 16,
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.lg,
-    width: 160,
-    padding: 8,
+    width: 220,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
   },
   menuOption: {
     flexDirection: 'row',
@@ -1474,59 +1532,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100,
     marginVertical: 4,
   },
-  selectionToolbar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 30,
-    paddingTop: 56,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
-  },
-  selectionToolbarContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 10,
-  },
-  selectionToolbarClose: {
-    width: 34,
-    height: 34,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.78)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  selectionToolbarTitleWrap: {
+  feedWrapper: {
     flex: 1,
-  },
-  selectionToolbarTitle: {
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.semiBold as any,
-    color: Colors.gray900,
-  },
-  selectionToolbarActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  selectionToolbarButton: {
-    width: 34,
-    height: 34,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.76)',
+    position: 'relative',
   },
   messagesSurface: {
     flex: 1,
   },
   messages: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   messagesScrollView: {
@@ -1565,112 +1581,6 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.xs,
     fontWeight: FontWeights.medium as any,
   },
-  messageRow: {
-    width: '100%',
-    marginBottom: Spacing.md,
-    flexDirection: 'row',
-  },
-  messageRowLeft: {
-    justifyContent: 'flex-start',
-  },
-  messageRowRight: {
-    justifyContent: 'flex-end',
-  },
-  bubble: {
-    maxWidth: '78%',
-    minWidth: 90,
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignSelf: 'flex-start',
-  },
-  theirBubble: {
-    backgroundColor: Colors.white,
-    borderBottomLeftRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-    alignSelf: 'flex-start',
-  },
-  myBubble: {
-    backgroundColor: '#0b7ed0',
-    borderBottomRightRadius: 8,
-    alignSelf: 'flex-end',
-  },
-  selectedBubble: {
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
-  },
-  forwardedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 4,
-  },
-  forwardedText: {
-    fontSize: 11,
-    color: Colors.gray500,
-    fontWeight: FontWeights.semiBold as any,
-    letterSpacing: 0.4,
-  },
-  repliedMessageCard: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
-    borderRadius: 16,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  replyAccent: {
-    width: 3,
-    backgroundColor: Colors.primary,
-  },
-  repliedMessageBody: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  repliedMessageAuthor: {
-    fontSize: FontSizes.xs,
-    color: Colors.primary,
-    fontWeight: FontWeights.semiBold as any,
-    marginBottom: 2,
-  },
-  repliedMessageText: {
-    fontSize: FontSizes.xs,
-    color: Colors.gray600,
-  },
-  messageText: {
-    fontSize: 17,
-    lineHeight: 24,
-    flexShrink: 1,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-  theirMessageText: {
-    color: Colors.gray900,
-  },
-  myMessageText: {
-    color: Colors.white,
-  },
-  messageFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    marginTop: 4,
-  },
-  messageTime: {
-    fontSize: 11,
-    opacity: 0.7,
-    includeFontPadding: false,
-    textAlign: 'right',
-  },
-  theirMessageTime: {
-    color: Colors.gray500,
-  },
-  myMessageTime: {
-    color: 'rgba(255,255,255,0.75)',
-  },
   typingRow: {
     marginBottom: Spacing.md,
     flexDirection: 'row',
@@ -1697,86 +1607,6 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
     backgroundColor: Colors.gray400,
   },
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  composerShell: {
-    marginHorizontal: 10,
-    marginBottom: 8,
-    borderRadius: 28,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-  },
-  attachButton: {
-    width: 42,
-    height: 42,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attachText: {
-    fontSize: 22,
-    color: Colors.gray700,
-    marginTop: -2,
-  },
-  input: {
-    flex: 1,
-    marginHorizontal: 10,
-    color: Colors.gray900,
-    fontSize: FontSizes.md,
-    minHeight: 44,
-    paddingVertical: 8,
-  },
-  replyPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
-  },
-  replyPreviewAccent: {
-    width: 3,
-    height: 32,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-    marginRight: 10,
-  },
-  replyPreviewBody: {
-    flex: 1,
-    marginHorizontal: 10,
-  },
-  replyPreviewAuthor: {
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.semiBold as any,
-    color: Colors.primary,
-  },
-  replyPreviewText: {
-    color: Colors.gray600,
-    flex: 1,
-  },
-  replyCancel: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: Colors.gray300,
-  },
   emptyState: {
     flex: 1,
     alignItems: 'center',
@@ -1802,7 +1632,7 @@ const styles = StyleSheet.create({
   },
   attachmentOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
   attachmentSheet: {
@@ -1810,14 +1640,73 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: BorderRadius.xl,
     borderTopRightRadius: BorderRadius.xl,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.xl,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: Colors.gray300,
+    alignSelf: 'center',
+    marginBottom: Spacing.lg,
   },
   attachmentTitle: {
     fontSize: FontSizes.lg,
     fontWeight: FontWeights.semiBold as any,
     color: Colors.gray900,
     marginBottom: Spacing.lg,
+  },
+  attachmentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  attachmentGridItem: {
+    width: '31%',
+    minHeight: 110,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.gray50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.gray100,
+  },
+  attachmentGridIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary + '10',
+    marginBottom: 8,
+  },
+  attachmentGridTitle: {
+    fontSize: FontSizes.xs,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray900,
+    textAlign: 'center',
+  },
+  attachmentGridDescription: {
+    marginTop: 4,
+    fontSize: 10,
+    color: Colors.gray500,
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  forwardSearchInput: {
+    backgroundColor: Colors.gray50,
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: FontSizes.md,
+    color: Colors.gray900,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
   },
   attachmentOption: {
     flexDirection: 'row',
@@ -1861,18 +1750,42 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
   },
+  imageAttachmentItem: {
+    borderRadius: 16,
+  },
+  imageAttachmentShell: {
+    width: '100%',
+    minWidth: 180,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: Colors.gray100,
+    position: 'relative',
+  },
   attachmentImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 10,
+    width: '100%',
+    height: '100%',
   },
   attachmentPlaceholder: {
-    width: 160,
-    height: 140,
+    width: 180,
+    minHeight: 140,
     backgroundColor: 'rgba(0,0,0,0.2)',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  imageTimestampPill: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  imageTimestampText: {
+    color: Colors.white,
+    fontSize: 10,
+    fontWeight: FontWeights.semiBold as any,
   },
   attachmentPlaceholderText: {
     color: Colors.white,
@@ -1986,6 +1899,153 @@ const styles = StyleSheet.create({
   searchResults: {
     flex: 1,
   },
+  forwardSheet: {
+    maxHeight: '78%',
+  },
+  forwardSearchSticky: {
+    marginBottom: Spacing.sm,
+  },
+  forwardSectionLabel: {
+    fontSize: FontSizes.xs,
+    color: Colors.gray500,
+    fontWeight: FontWeights.semiBold as any,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  forwardRecentRow: {
+    gap: 10,
+    paddingBottom: Spacing.sm,
+  },
+  forwardRecentCard: {
+    width: 92,
+    padding: 10,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.gray50,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.gray100,
+  },
+  forwardRecentCardSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '10',
+  },
+  forwardRecentAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    marginBottom: 8,
+  },
+  forwardRecentName: {
+    fontSize: 11,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray900,
+    textAlign: 'center',
+  },
+  forwardCheckChip: {
+    marginTop: 8,
+    width: 22,
+    height: 22,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.gray200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  forwardCheckChipSelected: {
+    backgroundColor: Colors.primary,
+  },
+  forwardCheckChipText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: FontWeights.bold as any,
+  },
+  forwardList: {
+    gap: 8,
+  },
+  forwardListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.gray50,
+    borderWidth: 1,
+    borderColor: Colors.gray100,
+  },
+  forwardListItemSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '10',
+  },
+  forwardListAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+  },
+  forwardListBody: {
+    flex: 1,
+  },
+  forwardListTitle: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semiBold as any,
+    color: Colors.gray900,
+  },
+  forwardListSubtitle: {
+    marginTop: 2,
+    fontSize: FontSizes.xs,
+    color: Colors.gray600,
+  },
+  forwardCheckMark: {
+    width: 24,
+    height: 24,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.gray200,
+  },
+  forwardCheckMarkSelected: {
+    backgroundColor: Colors.primary,
+  },
+  forwardCheckMarkText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: FontWeights.bold as any,
+  },
+  forwardFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: Spacing.md,
+  },
+  forwardCancelButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.gray100,
+  },
+  forwardCancelText: {
+    color: Colors.gray700,
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semiBold as any,
+  },
+  forwardSendButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+  },
+  forwardSendButtonDisabled: {
+    backgroundColor: Colors.gray300,
+  },
+  forwardSendText: {
+    color: Colors.white,
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semiBold as any,
+  },
   emptySearchState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -2006,6 +2066,12 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     color: Colors.gray900,
     marginBottom: 4,
+  },
+  myMessageText: {
+    color: Colors.primary,
+  },
+  theirMessageText: {
+    color: Colors.gray700,
   },
   searchResultTime: {
     fontSize: FontSizes.xs,
@@ -2124,6 +2190,23 @@ const styles = StyleSheet.create({
   },
   unblockConfirmButton: {
     backgroundColor: Colors.primary,
+  },
+  scrollToBottom: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
   },
   blockedBanner: {
     flexDirection: 'row',

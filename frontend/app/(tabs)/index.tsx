@@ -25,6 +25,7 @@ import {
   type ChatConversation,
   type ChatMessage,
 } from '@/lib/chatApi';
+import { getConversationsListCache, setConversationsListCache, subscribeConversationsListCache } from '@/lib/chatCache';
 import { getUserProfileByUsername, type UserProfile } from '@/lib/profileApi';
 import { API_BASE_URL } from '@/lib/apiBaseUrl';
 
@@ -69,6 +70,7 @@ export default function ChatScreen() {
     }
 
     setConversations(data.conversations);
+    setConversationsListCache({ conversations: data.conversations });
   }, [session?.access_token]);
 
   useFocusEffect(
@@ -76,6 +78,17 @@ export default function ChatScreen() {
       refreshConversations();
     }, [refreshConversations])
   );
+
+  useEffect(() => {
+    const unsubscribeConversationsList = subscribeConversationsListCache(() => {
+      const cachedList = getConversationsListCache();
+      if (cachedList?.conversations) {
+        setConversations(cachedList.conversations);
+      }
+    });
+
+    return unsubscribeConversationsList;
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -102,6 +115,7 @@ export default function ChatScreen() {
         setError(fetchError || 'Unable to load conversations.');
       } else {
         setConversations(data.conversations);
+        setConversationsListCache({ conversations: data.conversations });
       }
 
       setLoading(false);
@@ -148,8 +162,8 @@ export default function ChatScreen() {
         return;
       }
 
-      setConversations((prevConversations) =>
-        prevConversations
+      setConversations((prevConversations) => {
+        const nextConversations = prevConversations
           .map((convo) =>
             convo.id === message.conversation
               ? {
@@ -160,8 +174,11 @@ export default function ChatScreen() {
                 }
               : convo
           )
-          .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
-      );
+          .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+
+        setConversationsListCache({ conversations: nextConversations });
+        return nextConversations;
+      });
     });
 
     return () => {
@@ -292,11 +309,23 @@ export default function ChatScreen() {
   const renderItem = ({ item }: { item: ChatConversation }) => {
     const previewParticipant = item.participants.find((participant) => participant.id !== currentUserId) ?? item.participants[0];
 
+    const handleOpenConversation = () => {
+      setConversations((previousConversations) => {
+        const nextConversations = previousConversations.map((conversation) =>
+          conversation.id === item.id ? { ...conversation, unreadCount: 0 } : conversation
+        );
+        setConversationsListCache({ conversations: nextConversations });
+        return nextConversations;
+      });
+
+      router.push(`/chat/${item.id}`);
+    };
+
     return (
       <TouchableOpacity
         style={styles.chatItem}
         activeOpacity={0.7}
-        onPress={() => router.push(`/chat/${item.id}`)}
+        onPress={handleOpenConversation}
       >
         <Image source={{ uri: previewParticipant?.avatar }} style={styles.avatar} />
         <View style={styles.chatContent}>
