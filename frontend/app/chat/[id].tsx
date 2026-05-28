@@ -16,16 +16,18 @@ import {
   Image,
   Animated,
 } from 'react-native';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, ArrowDown, MoreVertical, Send, Search, Ban, Image as ImageIcon, Camera, FileText, Reply, Forward, Copy, Trash2, Star, X, Archive, Plus, BellOff, MapPin, Mic, UserRound, CornerUpLeft } from 'lucide-react-native';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
-import { BlurView } from 'expo-blur';
+import { ArrowLeft, ArrowDown, Search, Ban,
+Reply, Forward, Copy, Trash2, Star, Archive, BellOff, UserRound, CornerUpLeft
+} from 'lucide-react-native';
 import { io, Socket } from 'socket.io-client';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import type { ExtendedChatMessage } from '@/lib/chatTypes';
 import { useAuth } from '@/context/AuthContext';
 import { API_BASE_URL } from '@/lib/apiBaseUrl';
 import {
@@ -39,20 +41,15 @@ import {
 } from '@/lib/chatApi';
 import { getCurrentUserProfile } from '@/lib/profileApi';
 import { clearConversationCache, getConversationCache, getConversationsListCache, setConversationCache, setConversationsListCache, updateConversationMessages, setConversationScrollOffset } from '@/lib/chatCache';
+import MessageBubble from '@/components/MessageBubble';
+import AttachmentMenu from '@/components/AttachmentMenu';
+import ChatInputBar from '@/components/ChatInputBar';
+import ChatHeader from '@/components/ChatHeader';
 
 type MessageSender = string | { _id?: string; id?: string; fullName?: string; avatar?: string };
 type SocketAck = { error?: string; message?: ChatMessage };
 
-interface ReplyToData {
-  id: string;
-  text: string;
-  sender: { id: string; fullName: string } | null;
-  attachments: any[];
-}
-
-interface ExtendedChatMessage extends ChatMessage {
-  replyTo?: ReplyToData | null;
-}
+// Use shared ExtendedChatMessage from lib/chatTypes
 
 function getSenderId(sender: MessageSender | undefined) {
   if (!sender) return '';
@@ -74,7 +71,7 @@ function appendUniqueMessage(messages: ExtendedChatMessage[], nextMessage: Exten
   return [...messages, nextMessage];
 }
 
-function getFileIcon(fileName: string, type: string): { icon: string; label: string } {
+function getFileIcon(fileName: string, type?: string): { icon: string; label: string } {
   const lowerFileName = fileName.toLowerCase();
   if (type === 'audio' || lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) {
     return { icon: '🎵', label: 'Audio' };
@@ -128,6 +125,7 @@ function formatMessageDate(dateStr?: string) {
 
 export default function ChatDetailScreen() {
   const { height: screenHeight } = Dimensions.get('window');
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string }>();
   const { session } = useAuth();
   const scrollViewRef = useRef<ScrollView | null>(null);
@@ -160,7 +158,6 @@ export default function ChatDetailScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [composerHeight, setComposerHeight] = useState(44);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<{ url: string; type: string } | null>(null);
@@ -425,13 +422,6 @@ export default function ChatDetailScreen() {
     });
   };
 
-  const panRefs = useRef<Record<string, any>>({});
-
-  function ensurePanValue(id: string) {
-    if (!panRefs.current[id]) panRefs.current[id] = new Animated.Value(0);
-    return panRefs.current[id];
-  }
-
   const handleReplyTriggered = (message: ExtendedChatMessage) => {
     clearSelection();
     setReplyToMessage(message);
@@ -535,7 +525,11 @@ export default function ChatDetailScreen() {
 
   const handleViewProfile = () => {
     setMenuVisible(false);
-    router.push('/(tabs)/profile');
+    if (participant?.id) {
+      router.push({ pathname: '/profile/[id]', params: { id: String(participant.id), fromChat: 'true' } });
+    } else {
+      router.push('/(tabs)/profile');
+    }
   };
 
   const handleToggleMuteNotifications = () => {
@@ -687,19 +681,22 @@ export default function ChatDetailScreen() {
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsMultipleSelection: true,
+        selectionLimit: 10,
         quality: 0.8,
       });
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const fileName = asset.fileName || asset.uri.split('/').pop() || 'attachment';
-        const lowerFileName = fileName.toLowerCase();
-        let fileType: 'image' | 'video' | 'audio' | 'file' = 'image';
-        if (asset.type === 'video' || lowerFileName.match(/\.(mp4|mov|avi|mkv|flv|wmv|webm)$/i)) {
-          fileType = 'video';
-        } else if (lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) {
-          fileType = 'audio';
+      if (!result.canceled && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const fileName = asset.fileName || asset.uri.split('/').pop() || 'attachment';
+          const lowerFileName = fileName.toLowerCase();
+          let fileType: 'image' | 'video' | 'audio' | 'file' = 'image';
+          if (asset.type === 'video' || lowerFileName.match(/\.(mp4|mov|avi|mkv|flv|wmv|webm)$/i)) {
+            fileType = 'video';
+          } else if (lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) {
+            fileType = 'audio';
+          }
+          await sendAttachment(asset.uri, fileType, fileName);
         }
-        await sendAttachment(asset.uri, fileType, fileName);
       }
     } catch (err) {
       setError('Failed to pick from gallery.');
@@ -735,17 +732,19 @@ export default function ChatDetailScreen() {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
         copyToCacheDirectory: true,
+        multiple: true,
       });
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        const fileUri = asset.uri;
-        const fileName = asset.name || 'document';
-        const lowerFileName = fileName.toLowerCase();
-        let fileType: 'image' | 'video' | 'audio' | 'file' = 'file';
-        if (lowerFileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)) fileType = 'image';
-        else if (lowerFileName.match(/\.(mp4|mov|avi|mkv|flv|wmv|webm)$/i)) fileType = 'video';
-        else if (lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) fileType = 'audio';
-        await sendAttachment(fileUri, fileType, fileName);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          const fileUri = asset.uri;
+          const fileName = asset.name || 'document';
+          const lowerFileName = fileName.toLowerCase();
+          let fileType: 'image' | 'video' | 'audio' | 'file' = 'file';
+          if (lowerFileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|heic)$/i)) fileType = 'image';
+          else if (lowerFileName.match(/\.(mp4|mov|avi|mkv|flv|wmv|webm)$/i)) fileType = 'video';
+          else if (lowerFileName.match(/\.(mp3|wav|aac|flac|ogg|m4a|wma|opus)$/i)) fileType = 'audio';
+          await sendAttachment(fileUri, fileType, fileName);
+        }
       }
     } catch (err) {
       setError('Failed to pick file.');
@@ -921,152 +920,39 @@ export default function ChatDetailScreen() {
     );
   }
 
+  const handleMessagePress = useCallback((message: ExtendedChatMessage) => {
+    if (selectionModeActive) toggleMessageSelection(message.id);
+  }, [selectionModeActive, toggleMessageSelection]);
+
+  const handleImageLoad = useCallback((url: string, width: number, height: number) => {
+    setImageAspectRatios((previous) => ({
+      ...previous,
+      [url]: width / height,
+    }));
+  }, []);
+
+  const handleAttachmentPress = useCallback((attachment: any) => {
+    setError(null);
+    setSelectedAttachment(attachment);
+  }, []);
+
   const renderMessageBubble = (message: ExtendedChatMessage) => {
-    const isMine = getSenderId(message.sender as MessageSender) === currentUserId;
-    const hasAttachments = message.attachments && message.attachments.length > 0;
-    const pan = ensurePanValue(message.id);
-    const forwarded = isForwardedMessage(message);
-    const replyTo = message.replyTo as ReplyToData | null | undefined;
-
-    const onGestureEvent = (event: any) => {
-      pan.setValue(event.nativeEvent.translationX);
-    };
-
-    const onHandlerStateChange = ({ nativeEvent }: any) => {
-      if (nativeEvent.state !== State.END && nativeEvent.oldState !== State.ACTIVE) return;
-      const translationX = nativeEvent.translationX ?? 0;
-      if ((isMine && translationX < -65) || (!isMine && translationX > 65)) {
-        handleReplyTriggered(message);
-      }
-      Animated.spring(pan, {
-        toValue: 0,
-        tension: 60,
-        friction: 10,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    const replyOpacity = pan.interpolate({
-      inputRange: isMine ? [-70, -30, 0] : [0, 30, 70],
-      outputRange: [1, 0.5, 0],
-      extrapolate: 'clamp',
-    });
-    const replyScale = pan.interpolate({
-      inputRange: isMine ? [-70, -30, 0] : [0, 30, 70],
-      outputRange: [1, 0.7, 0],
-      extrapolate: 'clamp',
-    });
-
     return (
-      <PanGestureHandler key={message.id} onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange} activeOffsetX={isMine ? [-15, 1000] : [-1000, 15]}>
-        <View style={styles.messageBubbleWrap}>
-          {/* Reply action layer behind bubble */}
-          <Animated.View style={[styles.replyActionBackground, { opacity: replyOpacity, alignItems: isMine ? 'flex-end' : 'flex-start', paddingRight: isMine ? 24 : 0, paddingLeft: isMine ? 0 : 24 }]}>
-            <Animated.View style={[styles.replyActionIcon, { transform: [{ scale: replyScale }] }]}>
-              <CornerUpLeft size={18} color={Colors.gray500} />
-            </Animated.View>
-          </Animated.View>
-
-          {/* Message bubble */}
-          <Animated.View style={[styles.messageRow, isMine ? styles.messageRowRight : styles.messageRowLeft, { transform: [{ translateX: pan }] }]}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onLongPress={(e) => handleLongPress(message, e)}
-              onPress={() => {
-                if (selectionModeActive) toggleMessageSelection(message.id);
-              }}
-            >
-              <View style={[styles.bubble, isMine ? styles.myBubble : styles.theirBubble, isMessageSelected(message.id) ? styles.selectedBubble : null]}>
-                {forwarded && (
-                  <View style={styles.forwardedRow}>
-                    <Forward size={11} color={Colors.gray500} />
-                    <Text style={styles.forwardedText}>Forwarded</Text>
-                  </View>
-                )}
-
-                {replyTo && (
-                  <TouchableOpacity
-                    style={[styles.repliedMessageCard, isMine ? styles.repliedMessageCardMine : styles.repliedMessageCardTheirs]}
-                    activeOpacity={0.7}
-                    onPress={() => scrollToMessage(replyTo.id)}
-                  >
-                    <View style={styles.replyAccent} />
-                    <View style={styles.repliedMessageBody}>
-                      <Text style={[styles.repliedMessageAuthor, isMine && { color: 'rgba(255,255,255,0.9)' }]}>
-                        {replyTo.sender?.fullName ?? 'Reply'}
-                      </Text>
-                      <Text style={[styles.repliedMessageText, isMine && { color: 'rgba(255,255,255,0.7)' }]} numberOfLines={1}>
-                        {replyTo.text || 'Attachment'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
-
-                {hasAttachments && (
-                  <View style={styles.attachmentsContainer} pointerEvents={selectionModeActive ? 'none' : 'auto'}>
-                    {message.attachments.map((attachment, idx) => {
-                      const fileName = attachment.url?.split('/').pop() || `attachment-${idx}`;
-                      const fileInfo = getFileIcon(fileName, attachment.type);
-                      const isImageAttachment = attachment.type === 'image';
-                      const imageAspectRatio = imageAspectRatios[attachment.url] ?? 1;
-                      return (
-                        <TouchableOpacity
-                          key={idx}
-                          style={[styles.attachmentItem, isImageAttachment ? styles.imageAttachmentItem : null]}
-                          onPress={() => {
-                            setError(null);
-                            setSelectedAttachment(attachment);
-                          }}
-                        >
-                          {isImageAttachment ? (
-                            <View style={[styles.imageAttachmentShell, { aspectRatio: imageAspectRatio }]}>
-                              <Image
-                                source={{ uri: attachment.url }}
-                                style={styles.attachmentImage}
-                                resizeMode="cover"
-                                onLoad={(event) => {
-                                  const source = event.nativeEvent.source;
-                                  if (source?.width && source?.height) {
-                                    setImageAspectRatios((previous) => ({
-                                      ...previous,
-                                      [attachment.url]: source.width / source.height,
-                                    }));
-                                  }
-                                }}
-                              />
-                              <View style={styles.imageTimestampPill}>
-                                <Text style={styles.imageTimestampText}>{formatTime(message.createdAt)}</Text>
-                              </View>
-                            </View>
-                          ) : (
-                            <View style={[styles.attachmentPlaceholder, { backgroundColor: getAttachmentColor(attachment.type) }]}>
-                              <Text style={styles.attachmentPlaceholderText}>{fileInfo.icon}</Text>
-                              <Text style={styles.attachmentPlaceholderLabel}>{fileInfo.label}</Text>
-                              {fileName && <Text style={styles.attachmentFileName}>{fileName.substring(0, 12)}</Text>}
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-
-                {message.text && (
-                  <Text style={[styles.messageText, isMine ? styles.myMessageText : styles.theirMessageText]}>
-                    {message.text}
-                  </Text>
-                )}
-
-                <View style={styles.messageFooter}>
-                  <Text style={[styles.messageTime, isMine ? styles.myMessageTime : styles.theirMessageTime]}>
-                    {formatTime(message.createdAt)}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      </PanGestureHandler>
+      <MessageBubble
+        key={message.id}
+        message={message}
+        currentUserId={currentUserId}
+        selectionModeActive={selectionModeActive}
+        isMessageSelected={isMessageSelected}
+        onLongPress={handleLongPress}
+        onPress={handleMessagePress}
+        onReplyTriggered={handleReplyTriggered}
+        onScrollToMessage={scrollToMessage}
+        formatTime={formatTime}
+        imageAspectRatios={imageAspectRatios}
+        onImageLoad={handleImageLoad}
+        onAttachmentPress={handleAttachmentPress}
+      />
     );
   };
 
@@ -1103,32 +989,16 @@ export default function ChatDetailScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.select({ ios: 'padding', android: 'height' })}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backIconButton} onPress={() => router.back()}>
-          <ArrowLeft size={20} color={Colors.gray900} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerCenter} activeOpacity={0.7}>
-          <Image source={{ uri: participant?.avatar }} style={styles.headerAvatar} />
-          <View>
-            <Text style={styles.headerName} numberOfLines={1}>
-              {participant?.fullName ?? 'Conversation'}
-            </Text>
-            <Text style={styles.headerMeta} numberOfLines={1}>
-              {isParticipantTyping ? (
-                <Text style={styles.typingStatusText}>typing...</Text>
-              ) : (
-                participant?.username ? `@${participant.username}` : participant?.email ?? 'Active now'
-              )}
-            </Text>
-          </View>
-        </TouchableOpacity>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton} onPress={toggleMenu}>
-            <MoreVertical size={18} color={Colors.gray900} />
-          </TouchableOpacity>
-        </View>
-      </View>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeContainer}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+      <ChatHeader
+        userName={participant?.fullName ?? 'Conversation'}
+        userHandle={participant?.username ? `@${participant.username}` : participant?.email}
+        profileImageUri={participant?.avatar}
+        userId={participant?.id}
+        isTyping={isParticipantTyping}
+        onMenuPress={toggleMenu}
+      />
 
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={toggleMenu}>
         <Pressable style={styles.modalOverlay} onPress={toggleMenu}>
@@ -1176,63 +1046,65 @@ export default function ChatDetailScreen() {
         </Pressable>
       </Modal>
 
-      <Pressable style={styles.messagesSurface} onPress={selectionModeActive ? clearSelection : undefined}>
-        <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={styles.messages}
-          showsVerticalScrollIndicator={false}
-          style={styles.messagesScrollView}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          removeClippedSubviews={true}
-          scrollEventThrottle={16}
-          onScroll={(e) => {
-            try {
-              const y = e.nativeEvent.contentOffset.y;
-              const h = e.nativeEvent.contentSize.height - e.nativeEvent.layoutMeasurement.height;
-              setShowScrollToBottom(y < h - 120);
-              setConversationScrollOffset(conversationId, y);
-            } catch {}
-          }}
-        >
-          {messages.length === 0 ? (
-            <View style={styles.emptyConversationState}>
-              <Text style={styles.emptyConversationTitle}>No messages yet</Text>
-              <Text style={styles.emptyConversationText}>Send the first message to start the conversation.</Text>
-            </View>
-          ) : (
-            renderMessages()
-          )}
+      <View style={styles.feedWrapper}>
+        <Pressable style={styles.messagesSurface} onPress={selectionModeActive ? clearSelection : undefined}>
+          <ScrollView
+            ref={scrollViewRef}
+            contentContainerStyle={styles.messages}
+            showsVerticalScrollIndicator={false}
+            style={styles.messagesScrollView}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            removeClippedSubviews={true}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              try {
+                const y = e.nativeEvent.contentOffset.y;
+                const h = e.nativeEvent.contentSize.height - e.nativeEvent.layoutMeasurement.height;
+                setShowScrollToBottom(y < h - 120);
+                setConversationScrollOffset(conversationId, y);
+              } catch {}
+            }}
+          >
+            {messages.length === 0 ? (
+              <View style={styles.emptyConversationState}>
+                <Text style={styles.emptyConversationTitle}>No messages yet</Text>
+                <Text style={styles.emptyConversationText}>Send the first message to start the conversation.</Text>
+              </View>
+            ) : (
+              renderMessages()
+            )}
 
-          {isParticipantTyping && (
-            <View style={styles.typingRow}>
-              <View style={styles.typingBubble}>
-                <View style={styles.typingDots}>
-                  {typingDotAnims.current.map((anim, i) => (
-                    <Animated.View
-                      key={i}
-                      style={[
-                        styles.typingDot,
-                        { opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) },
-                      ]}
-                    />
-                  ))}
+            {isParticipantTyping && (
+              <View style={styles.typingRow}>
+                <View style={styles.typingBubble}>
+                  <View style={styles.typingDots}>
+                    {typingDotAnims.current.map((anim, i) => (
+                      <Animated.View
+                        key={i}
+                        style={[
+                          styles.typingDot,
+                          { opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) },
+                        ]}
+                      />
+                    ))}
+                  </View>
                 </View>
               </View>
-            </View>
-          )}
-        </ScrollView>
-      </Pressable>
+            )}
+          </ScrollView>
+        </Pressable>
 
-      {showScrollToBottom && (
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.scrollToBottom}
-          onPress={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-        >
-          <ArrowDown size={20} color={Colors.white} />
-        </TouchableOpacity>
-      )}
+        {showScrollToBottom && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.scrollToBottom}
+            onPress={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+          >
+            <ArrowDown size={18} color="#64748B" />
+          </TouchableOpacity>
+        )}
+      </View>
 
       {isParticipantBlocked ? (
         <View style={styles.blockedBanner}>
@@ -1246,78 +1118,29 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <BlurView intensity={24} tint="light" style={styles.composerShell}>
-          {replyToMessage && (
-            <View style={styles.replyPreview}>
-              <View style={styles.replyPreviewAccent} />
-              <View style={styles.replyPreviewBody}>
-                <Text style={styles.replyPreviewAuthor}>
-                  {(replyToMessage.sender as any)?.fullName ?? 'Reply'}
-                </Text>
-                <Text style={styles.replyPreviewText} numberOfLines={1}>
-                  {getReplyPreviewLabel(replyToMessage)}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setReplyToMessage(null)} style={styles.replyCancel}>
-                <X size={18} color={Colors.gray500} />
-              </TouchableOpacity>
-            </View>
-          )}
-          <View style={styles.composer}>
-            <TouchableOpacity style={styles.attachButton} onPress={() => setAttachmentModalVisible(true)} activeOpacity={0.7}>
-              <Plus size={22} color={Colors.gray700} />
-            </TouchableOpacity>
-            <TextInput
-              ref={inputRef}
-              placeholder="Write a message"
-              placeholderTextColor={Colors.gray500}
-              style={[styles.input, { height: Math.min(Math.max(composerHeight, 44), 100) }]}
-              value={newMessage}
-              onChangeText={handleMessageChange}
-              onBlur={() => emitTypingState(false)}
-              onSubmitEditing={sendMessage}
-              multiline
-              textAlignVertical="center"
-              returnKeyType="send"
-              onContentSizeChange={(event) => {
-                const nextHeight = event.nativeEvent.contentSize.height + 6;
-                setComposerHeight(Math.min(Math.max(nextHeight, 44), 100));
-              }}
-            />
-            <TouchableOpacity style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]} onPress={sendMessage} activeOpacity={0.7}>
-              <Send size={18} color={newMessage.trim() ? Colors.white : 'rgba(255,255,255,0.5)'} />
-            </TouchableOpacity>
-          </View>
-        </BlurView>
+        <ChatInputBar
+          newMessage={newMessage}
+          handleMessageChange={handleMessageChange}
+          sendMessage={sendMessage}
+          replyToMessage={replyToMessage}
+          setReplyToMessage={setReplyToMessage}
+          inputRef={inputRef}
+          getReplyPreviewLabel={getReplyPreviewLabel}
+          setAttachmentModalVisible={setAttachmentModalVisible}
+          bottomInset={insets.bottom}
+        />
       )}
 
-      <Modal visible={attachmentModalVisible} transparent animationType="fade" onRequestClose={() => setAttachmentModalVisible(false)}>
+      <Modal visible={attachmentModalVisible} transparent animationType="slide" onRequestClose={() => setAttachmentModalVisible(false)}>
         <Pressable style={styles.attachmentOverlay} onPress={() => setAttachmentModalVisible(false)}>
-          <Pressable style={styles.attachmentSheet} onPress={() => undefined}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.attachmentTitle}>Add Attachment</Text>
-            <View style={styles.attachmentGrid}>
-              {[
-                { key: 'gallery', label: 'Gallery', icon: ImageIcon, description: 'Photos and video', action: pickFromGallery },
-                { key: 'camera', label: 'Camera', icon: Camera, description: 'Capture now', action: pickFromCamera },
-                { key: 'document', label: 'Document', icon: FileText, description: 'PDF or file', action: pickDocument },
-                { key: 'audio', label: 'Audio', icon: Mic, description: 'Voice or audio file', action: async () => { setAttachmentModalVisible(false); setError('Audio upload is not wired yet.'); } },
-                { key: 'location', label: 'Location', icon: MapPin, description: 'Share place', action: async () => { setAttachmentModalVisible(false); setError('Location sharing is not wired yet.'); } },
-                { key: 'contact', label: 'Contact', icon: UserRound, description: 'Share person', action: async () => { setAttachmentModalVisible(false); setError('Contact sharing is not wired yet.'); } },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <TouchableOpacity key={item.key} style={styles.attachmentGridItem} onPress={item.action} activeOpacity={0.75}>
-                    <View style={styles.attachmentGridIconWrap}>
-                      <Icon size={22} color={Colors.primary} />
-                    </View>
-                    <Text style={styles.attachmentGridTitle}>{item.label}</Text>
-                    <Text style={styles.attachmentGridDescription} numberOfLines={2}>{item.description}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </Pressable>
+          <AttachmentMenu
+            onSelect={(type) => {
+              if (type === 'gallery') pickFromGallery();
+              else if (type === 'camera') pickFromCamera();
+              else if (type === 'document') pickDocument();
+            }}
+            onClose={() => setAttachmentModalVisible(false)}
+          />
         </Pressable>
       </Modal>
 
@@ -1570,7 +1393,7 @@ export default function ChatDetailScreen() {
                         style={styles.mediaGridItem}
                         onPress={() => {
                           setMediaVisible(false);
-                          setSelectedAttachment(attachment);
+                          setSelectedAttachment({ url: attachment.url, type: attachment.type ?? 'file' });
                         }}
                       >
                         {attachment.type === 'image' ? (
@@ -1624,71 +1447,18 @@ export default function ChatDetailScreen() {
         </Pressable>
       </Modal>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F7F8FC',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 56,
-    paddingBottom: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
-    zIndex: 10,
-  },
-  backIconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginHorizontal: Spacing.sm,
-  },
-  headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.full,
-    marginRight: 10,
-  },
-  headerName: {
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.semiBold as any,
-    color: Colors.gray900,
-  },
-  headerMeta: {
-    fontSize: FontSizes.xs,
-    color: Colors.gray500,
-    marginTop: 2,
-  },
-  typingStatusText: {
-    color: Colors.primary,
-    fontStyle: 'italic',
-    fontWeight: FontWeights.medium as any,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.03)',
   },
   modalOverlay: {
     flex: 1,
@@ -1762,13 +1532,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100,
     marginVertical: 4,
   },
+  feedWrapper: {
+    flex: 1,
+    position: 'relative',
+  },
   messagesSurface: {
     flex: 1,
   },
   messages: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   messagesScrollView: {
@@ -1807,149 +1581,6 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.xs,
     fontWeight: FontWeights.medium as any,
   },
-  messageRow: {
-    width: '100%',
-    marginBottom: Spacing.md,
-    flexDirection: 'row',
-  },
-  messageBubbleWrap: {
-    position: 'relative',
-  },
-  replyActionBackground: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    zIndex: 0,
-  },
-  replyActionIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  messageRowLeft: {
-    justifyContent: 'flex-start',
-  },
-  messageRowRight: {
-    justifyContent: 'flex-end',
-  },
-  bubble: {
-    maxWidth: '72%',
-    minWidth: 90,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignSelf: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  theirBubble: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.02)',
-    alignSelf: 'flex-start',
-  },
-  myBubble: {
-    backgroundColor: '#0ea5e9',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 3,
-    alignSelf: 'flex-end',
-  },
-  selectedBubble: {
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
-  },
-  forwardedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 4,
-  },
-  forwardedText: {
-    fontSize: 11,
-    color: Colors.gray500,
-    fontWeight: FontWeights.semiBold as any,
-    letterSpacing: 0.4,
-  },
-  repliedMessageCard: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    borderRadius: 10,
-    marginBottom: 8,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderLeftWidth: 3,
-  },
-  repliedMessageCardMine: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderLeftColor: '#FFFFFF',
-  },
-  repliedMessageCardTheirs: {
-    backgroundColor: 'rgba(14, 165, 233, 0.06)',
-    borderLeftColor: '#0ea5e9',
-  },
-  replyAccent: {
-    display: 'none',
-  },
-  repliedMessageBody: {
-    flex: 1,
-  },
-  repliedMessageAuthor: {
-    fontSize: FontSizes.xs,
-    color: Colors.primary,
-    fontWeight: FontWeights.semiBold as any,
-    marginBottom: 2,
-  },
-  repliedMessageText: {
-    fontSize: FontSizes.xs,
-    color: Colors.gray600,
-  },
-  messageText: {
-    fontSize: 17,
-    lineHeight: 24,
-    flexShrink: 1,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-  theirMessageText: {
-    color: Colors.gray900,
-  },
-  myMessageText: {
-    color: Colors.white,
-  },
-  messageFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    marginTop: 4,
-  },
-  messageTime: {
-    fontSize: 11,
-    opacity: 0.7,
-    includeFontPadding: false,
-    textAlign: 'right',
-  },
-  theirMessageTime: {
-    color: Colors.gray500,
-  },
-  myMessageTime: {
-    color: 'rgba(255,255,255,0.75)',
-  },
   typingRow: {
     marginBottom: Spacing.md,
     flexDirection: 'row',
@@ -1975,82 +1606,6 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 3.5,
     backgroundColor: Colors.gray400,
-  },
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  composerShell: {
-    marginHorizontal: 10,
-    marginBottom: 8,
-    borderRadius: 28,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-  },
-  attachButton: {
-    width: 42,
-    height: 42,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  input: {
-    flex: 1,
-    marginHorizontal: 10,
-    color: Colors.gray900,
-    fontSize: FontSizes.md,
-    minHeight: 44,
-    paddingVertical: 8,
-  },
-  replyPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(14, 165, 233, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
-  },
-  replyPreviewAccent: {
-    width: 3,
-    height: 32,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-    marginRight: 10,
-  },
-  replyPreviewBody: {
-    flex: 1,
-    marginHorizontal: 10,
-  },
-  replyPreviewAuthor: {
-    fontSize: FontSizes.sm,
-    fontWeight: FontWeights.semiBold as any,
-    color: Colors.primary,
-  },
-  replyPreviewText: {
-    color: Colors.gray600,
-    flex: 1,
-  },
-  replyCancel: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: Colors.gray300,
   },
   emptyState: {
     flex: 1,
@@ -2512,6 +2067,12 @@ const styles = StyleSheet.create({
     color: Colors.gray900,
     marginBottom: 4,
   },
+  myMessageText: {
+    color: Colors.primary,
+  },
+  theirMessageText: {
+    color: Colors.gray700,
+  },
   searchResultTime: {
     fontSize: FontSizes.xs,
     color: Colors.gray500,
@@ -2632,20 +2193,20 @@ const styles = StyleSheet.create({
   },
   scrollToBottom: {
     position: 'absolute',
-    bottom: 100,
-    right: 20,
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primary,
+    bottom: 16,
+    right: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 20,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
   },
   blockedBanner: {
     flexDirection: 'row',

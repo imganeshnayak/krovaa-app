@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, ImageProps, StyleSheet, ViewStyle, ImageStyle } from 'react-native';
+import { View, Text, Image, ImageProps, StyleSheet, ViewStyle, ImageStyle, TextStyle } from 'react-native';
 
 type AvatarProps = {
   source?: ImageProps['source'];
@@ -12,7 +12,7 @@ type AvatarProps = {
 
 type AvatarFallbackProps = {
   style?: ViewStyle;
-  textStyle?: Text.StyleProps;
+  textStyle?: TextStyle;
   backgroundColor?: string;
   textColor?: string;
 };
@@ -74,7 +74,7 @@ export const AvatarFallback = ({
 };
 
 export const AvatarImage = (props: AvatarImageProps) => {
-  return <Image {...props} style={{ width: '100%', height: '100%', ...props.style }} />;
+  return <Image {...props} style={[{ width: '100%', height: '100%' }, props.style]} />;
 };
 
 const styles = StyleSheet.create({

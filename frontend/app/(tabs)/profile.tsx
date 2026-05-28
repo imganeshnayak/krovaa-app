@@ -3,8 +3,11 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIn
 import { Video, ResizeMode } from 'expo-av';
 import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useLocalSearchParams } from 'expo-router';
+import { API_BASE_URL } from '@/lib/apiBaseUrl';
 import {
   Star,
   MapPin,
@@ -48,6 +51,7 @@ import {
 } from 'lucide-react-native';
 import {
   getCurrentUserProfile,
+  getUserProfile,
   getVerificationStatus,
   getVerificationFee,
   applyForVerification,
@@ -122,6 +126,8 @@ type BadgeMilestone = {
   color: string;
 };
 
+type UserProfile = any;
+
 const VERIFICATION_TASKS = [
   {
     key: 'email',
@@ -143,7 +149,7 @@ const VERIFICATION_TASKS = [
   },
 ] as const;
 
-function getRelativeTime(value?: string) {
+function getRelativeTime(value?: string | null) {
   if (!value) return 'No timestamp yet';
 
   const inputDate = new Date(value);
@@ -159,6 +165,7 @@ function getRelativeTime(value?: string) {
   if (diffMinutes > 0) return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
   return 'Just now';
 }
+
 
 function normalizeProfession(value: string): ProfessionOption {
   const normalized = value.trim().toLowerCase() as ProfessionOption;
@@ -212,6 +219,8 @@ const getSocialIcon = (platform: string) => {
 
 export default function ProfileScreen() {
   const { session, user: currentUser, loading: authLoading, signInDev } = useAuth() as any;
+  const params = useLocalSearchParams<{ userId?: string }>();
+  const viewingUserId = params.userId;
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [localAvatarPreview, setLocalAvatarPreview] = useState<string | null>(null);
@@ -420,29 +429,31 @@ export default function ProfileScreen() {
   const postTileSize = Math.floor((width - (Spacing.lg * 2) - (Spacing.lg * 2) - (postGridGap * 2)) / 3);
 
   const [postForm, setPostForm] = useState({
+    text: '',
+    attachments: [] as any[],
     caption: '',
-    mediaItems: [] as Array<{ uri: string; mimeType: string }>,
+    mediaItems: [] as any[],
   });
 
-const [editForm, setEditForm] = useState({
-  fullName: '',
-  city: '',
-  pincode: '',
-  phoneNumber: '',
-  age: '',
-  gender: '',
-  profession: 'none',
-  skillsText: '',
-  bio: '',
-  avatar: '',
-  userGoal: '',
-  socialLinks: [] as Array<{ platform: string; url: string }>,
-  customProfession: '',
-  selectedCategory: '',
-  coverPhoto: '',
-});
+  const [editForm, setEditForm] = useState({
+    fullName: '',
+    city: '',
+    pincode: '',
+    phoneNumber: '',
+    age: '',
+    gender: '',
+    profession: 'none',
+    skillsText: '',
+    bio: '',
+    avatar: '',
+    userGoal: '',
+    socialLinks: [] as any[],
+    customProfession: '',
+    selectedCategory: '',
+    coverPhoto: '',
+  });
 
-  useEffect(() => {
+    useEffect(() => {
     let isMounted = true;
 
     async function fetchProfile() {
@@ -458,25 +469,50 @@ const [editForm, setEditForm] = useState({
       }
 
       try {
-        const { data, error: fetchError } = await getCurrentUserProfile(session.access_token);
-        if (isMounted) {
-          if (fetchError) {
-            setError(fetchError);
-          } else if (data) {
-            setProfile(data.user);
-            // If viewing someone else's profile, fetch rating eligibility
-            try {
-              if (session?.access_token && data?.user && currentUser && String(data.user.id) !== String(currentUser.id)) {
-                const { data: eligData, error: eligErr } = await getRatingEligibility(session.access_token, data.user.id);
-                if (!eligErr && eligData) {
-                  setCanRateUser(Boolean(eligData.canRate));
-                  setRatingEligibilityReason(eligData.reason || '');
-                } else {
-                  setCanRateUser(false);
+        if (viewingUserId) {
+          const { data, error: fetchError } = await getUserProfile(viewingUserId);
+          if (isMounted) {
+            if (fetchError) {
+              setError(fetchError);
+            } else if (data) {
+              setProfile(data.user);
+              // When viewing another user's profile, check rating eligibility
+              try {
+                if (session?.access_token && currentUser && String(data.user.id) !== String(currentUser.id)) {
+                  const { data: eligData, error: eligErr } = await getRatingEligibility(session.access_token, data.user.id);
+                  if (!eligErr && eligData) {
+                    setCanRateUser(Boolean(eligData.canRate));
+                    setRatingEligibilityReason(eligData.reason || '');
+                  } else {
+                    setCanRateUser(false);
+                  }
                 }
+              } catch {
+                setCanRateUser(false);
               }
-            } catch {
-              setCanRateUser(false);
+            }
+          }
+        } else {
+          const { data, error: fetchError } = await getCurrentUserProfile(session.access_token);
+          if (isMounted) {
+            if (fetchError) {
+              setError(fetchError);
+            } else if (data) {
+              setProfile(data.user);
+              // If viewing someone else's profile, fetch rating eligibility
+              try {
+                if (session?.access_token && data?.user && currentUser && String(data.user.id) !== String(currentUser.id)) {
+                  const { data: eligData, error: eligErr } = await getRatingEligibility(session.access_token, data.user.id);
+                  if (!eligErr && eligData) {
+                    setCanRateUser(Boolean(eligData.canRate));
+                    setRatingEligibilityReason(eligData.reason || '');
+                  } else {
+                    setCanRateUser(false);
+                  }
+                }
+              } catch {
+                setCanRateUser(false);
+              }
             }
           }
         }
@@ -496,7 +532,7 @@ const [editForm, setEditForm] = useState({
     return () => {
       isMounted = false;
     };
-  }, [session?.access_token]);
+  }, [session?.access_token, viewingUserId, currentUser?.id]);
 
   // Dev fallback: when using the dev sign-in helper, populate a minimal profile
   useEffect(() => {
@@ -580,17 +616,33 @@ const [editForm, setEditForm] = useState({
     let isMounted = true;
 
     async function fetchPosts() {
-      if (!session?.access_token) {
-        if (isMounted) {
-          setPostsLoading(false);
+      // If viewing another user's profile, fetch their public posts (no auth required)
+      if (viewingUserId) {
+        try {
+          const url = `${API_BASE_URL}/api/posts/user/${encodeURIComponent(String(viewingUserId))}`;
+          const resp = await fetch(url, { method: 'GET' });
+          const json = await resp.json();
+          if (!isMounted) return;
+          if (!resp.ok) {
+            setPostsError(json.error || 'Unable to fetch posts');
+          } else {
+            setPosts(json.posts || []);
+          }
+        } catch {
+          if (isMounted) setPostsError('Failed to load posts');
+        } finally {
+          if (isMounted) setPostsLoading(false);
         }
         return;
       }
 
+      if (!session?.access_token) {
+        if (isMounted) setPostsLoading(false);
+        return;
+      }
+
       if (session.access_token === 'dev-token') {
-        if (isMounted) {
-          setPostsLoading(false);
-        }
+        if (isMounted) setPostsLoading(false);
         return;
       }
 
@@ -604,13 +656,9 @@ const [editForm, setEditForm] = useState({
           setPosts(data.posts);
         }
       } catch {
-        if (isMounted) {
-          setPostsError('Failed to load posts');
-        }
+        if (isMounted) setPostsError('Failed to load posts');
       } finally {
-        if (isMounted) {
-          setPostsLoading(false);
-        }
+        if (isMounted) setPostsLoading(false);
       }
     }
 
@@ -619,7 +667,7 @@ const [editForm, setEditForm] = useState({
     return () => {
       isMounted = false;
     };
-  }, [session?.access_token]);
+  }, [session?.access_token, viewingUserId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -744,7 +792,7 @@ const handleOpenEditModal = () => {
   const handleOpenPostModal = () => {
     setEditingPostId(null);
     setPostError(null);
-    setPostForm({ caption: '', mediaItems: [] });
+    setPostForm({ text: '', attachments: [], caption: '', mediaItems: [] });
     setShowPostModal(true);
   };
 
@@ -752,6 +800,8 @@ const handleOpenEditModal = () => {
     setEditingPostId(post.id);
     setPostError(null);
     setPostForm({
+      text: '',
+      attachments: [],
       caption: post.caption,
       mediaItems: [{ uri: post.mediaUrl, mimeType: post.mediaType === 'video' ? 'video/mp4' : 'image/jpeg' }],
     });
@@ -762,7 +812,7 @@ const handleOpenEditModal = () => {
     setShowPostModal(false);
     setEditingPostId(null);
     setPostError(null);
-    setPostForm({ caption: '', mediaItems: [] });
+    setPostForm({ text: '', attachments: [], caption: '', mediaItems: [] });
   };
 
     const handleSaveProfile = async () => {
@@ -894,7 +944,7 @@ const handleOpenEditModal = () => {
       }
 
       if (data?.user?.avatar) {
-        setProfile((prev) => (prev ? { ...prev, avatar: data.user.avatar } : prev));
+        setProfile((prev: UserProfile | null) => (prev ? { ...prev, avatar: data.user.avatar } : prev));
         setEditForm((prev) => ({ ...prev, avatar: data.user.avatar }));
         setLocalAvatarPreview(null);
       }
@@ -914,7 +964,7 @@ const handleOpenEditModal = () => {
       }
 
       if (data?.user?.coverPhotoUrl !== undefined) {
-        setProfile((prev) => (prev ? { ...prev, coverPhotoUrl: data.user.coverPhotoUrl } : prev));
+        setProfile((prev: UserProfile | null) => (prev ? { ...prev, coverPhotoUrl: data.user.coverPhotoUrl } : prev));
         setEditForm((prev) => ({ ...prev, coverPhoto: data.user.coverPhotoUrl || '' }));
         setLocalCoverPreview(null);
       }
@@ -1120,7 +1170,7 @@ const handleOpenEditModal = () => {
 
       if (data?.user?.avatar) {
         setEditForm((prev) => ({ ...prev, avatar: data.user.avatar }));
-        setProfile((prev) => (prev ? { ...prev, avatar: data.user.avatar } : prev));
+        setProfile((prev: UserProfile | null) => (prev ? { ...prev, avatar: data.user.avatar } : prev));
         setLocalAvatarPreview(null);
       }
     } catch {
@@ -1187,7 +1237,7 @@ const handleOpenEditModal = () => {
 
       if (data?.user?.coverPhotoUrl) {
         setEditForm((prev) => ({ ...prev, coverPhoto: data.user.coverPhotoUrl || '' }));
-        setProfile((prev) => (prev ? { ...prev, coverPhotoUrl: data.user.coverPhotoUrl } : prev));
+        setProfile((prev: UserProfile | null) => (prev ? { ...prev, coverPhotoUrl: data.user.coverPhotoUrl } : prev));
         setLocalCoverPreview(null);
       }
     } catch {
@@ -1545,7 +1595,7 @@ const handleOpenEditModal = () => {
               <View style={styles.socialPreviewWrap}>
                 <Text style={styles.sectionEyebrow}>Connect</Text>
                 <View style={styles.socialPreviewRow}>
-                  {profile.socialLinks.map((link) => {
+                  {profile.socialLinks.map((link: any) => {
                     const Icon = getSocialIcon(link.platform);
                     return (
                       <TouchableOpacity
@@ -1670,7 +1720,7 @@ const handleOpenEditModal = () => {
       <View style={styles.skillsSection}>
         <Text style={styles.skillsTitle}>Skills</Text>
         <View style={styles.skillsRow}>
-          {profile.skills.length > 0 ? profile.skills.map((skill) => (
+          {profile.skills.length > 0 ? profile.skills.map((skill: any) => (
             <View key={skill} style={styles.skillChip}>
               <Text style={styles.skillText}>{skill}</Text>
             </View>

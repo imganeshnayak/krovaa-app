@@ -255,12 +255,26 @@ router.get('/conversations', verifyToken, async (req, res) => {
 
     const convosWithUnread = await Promise.all(
       convos.map(async (convo) => {
-        const unreadCount = await Message.count({
+        const receivedMessages = await Message.findMany({
           where: {
             conversationId: convo.id,
             senderId: { not: req.userId },
           },
+          select: {
+            readBy: true,
+          },
         });
+
+        const unreadCount = receivedMessages.reduce((count, message) => {
+          let readBy = [];
+          try {
+            readBy = JSON.parse(message.readBy || '[]');
+          } catch {
+            readBy = [];
+          }
+
+          return readBy.includes(req.userId) ? count : count + 1;
+        }, 0);
 
         return {
           id: String(convo.id),
