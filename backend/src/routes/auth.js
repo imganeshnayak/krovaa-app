@@ -185,6 +185,7 @@ router.post('/register', async (req, res) => {
       email: normalizedEmail,
       username: normalizedUsername,
       password,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(normalizedUsername)}&background=random&color=fff&size=150`,
     });
 
     const token = createToken(user);
@@ -294,6 +295,7 @@ router.post('/register/verify-otp', async (req, res) => {
       email: normalizedEmail,
       username: pending.username,
       password: pending.password,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(pending.username)}&background=random&color=fff&size=150`,
     });
 
     pendingRegistrations.delete(normalizedEmail);

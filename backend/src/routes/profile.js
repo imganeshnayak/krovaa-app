@@ -641,11 +641,12 @@ router.put('/', verifyToken, async (req, res) => {
     } = req.body;
 
     if (profession !== undefined) {
-      const normalizedProfession = String(profession).trim().toLowerCase();
-      if (!PROFESSION_OPTIONS.includes(normalizedProfession)) {
-        return res.status(400).json({
-          error: `Profession must be one of: ${PROFESSION_OPTIONS.join(', ')}`,
-        });
+      const trimmedProfession = String(profession).trim();
+      if (!trimmedProfession) {
+        return res.status(400).json({ error: 'Profession cannot be empty.' });
+      }
+      if (trimmedProfession.length > 100) {
+        return res.status(400).json({ error: 'Profession must be 100 characters or less.' });
       }
     }
 
@@ -705,10 +706,15 @@ router.put('/', verifyToken, async (req, res) => {
 
 router.delete('/photo', verifyToken, async (req, res) => {
   try {
+    const activeUser = await User.findUnique({ where: { id: req.userId } });
+    if (!activeUser) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
     const user = await User.update({
       where: { id: req.userId },
       data: {
-        avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(activeUser.username)}&background=random&color=fff&size=150`,
       },
     });
 
@@ -1068,6 +1074,35 @@ router.post('/unblock/:blockedUserId', verifyToken, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Unable to unblock user.' });
+  }
+});
+
+router.get('/blocked-list', verifyToken, async (req, res) => {
+  try {
+    const blockedRelations = await prisma.blockedUser.findMany({
+      where: { blockerId: req.userId },
+      include: {
+        blocked: {
+          select: {
+            id: true,
+            fullName: true,
+            avatar: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    const blockedUsers = blockedRelations.map((r) => ({
+      id: String(r.blocked.id),
+      fullName: r.blocked.fullName,
+      avatar: r.blocked.avatar,
+      username: r.blocked.username,
+    }));
+
+    return res.json({ blockedUsers });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Unable to fetch blocked users.' });
   }
 });
 

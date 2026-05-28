@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Bell, Lock, Globe, Circle as HelpCircle, LogOut, ChevronRight, Moon, Shield, Smartphone, MessageSquare } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
+import { Bell, Lock, Circle as HelpCircle, LogOut, ChevronRight, Shield, MessageSquare, Info, FileText, CreditCard, Mail } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 
@@ -9,15 +10,12 @@ const SETTINGS_SECTIONS = [
     items: [
       { icon: Lock, label: 'Change Password', color: Colors.primary },
       { icon: Shield, label: 'Privacy & Security', color: Colors.secondary },
-      { icon: Smartphone, label: 'Two-Factor Auth', color: Colors.accent },
     ],
   },
   {
     title: 'Preferences',
     items: [
       { icon: Bell, label: 'Notifications', color: Colors.warning },
-      { icon: Globe, label: 'Language', color: Colors.primary },
-      { icon: Moon, label: 'Dark Mode', color: Colors.gray700 },
     ],
   },
   {
@@ -27,10 +25,55 @@ const SETTINGS_SECTIONS = [
       { icon: MessageSquare, label: 'Contact Support', color: Colors.primary },
     ],
   },
+  {
+    title: 'About Us',
+    items: [
+      { icon: Info, label: 'App Version', color: Colors.gray500 },
+      { icon: FileText, label: 'Terms of Service', color: Colors.primary },
+      { icon: Shield, label: 'Privacy Policy', color: Colors.secondary },
+      { icon: CreditCard, label: 'Refund Policy', color: Colors.accent },
+      { icon: FileText, label: 'Cookie Policy', color: Colors.warning },
+      { icon: Mail, label: 'Contact Us', color: Colors.primary },
+    ],
+  },
 ];
 
 export default function SettingsScreen() {
   const { signOut, user } = useAuth();
+  const router = useRouter();
+
+  const handlePress = (label: string) => {
+    if (label === 'Change Password') {
+      router.push({
+        pathname: '/(auth)/forgot-password',
+        params: { fromSettings: 'true' },
+      });
+    } else if (label === 'Privacy & Security') {
+      router.push('/privacy-security');
+    } else if (label === 'Terms of Service') {
+      Linking.openURL('https://krovaa.com/terms').catch(() =>
+        Alert.alert('Error', 'Unable to open website link.')
+      );
+    } else if (label === 'Privacy Policy') {
+      Linking.openURL('https://krovaa.com/privacy').catch(() =>
+        Alert.alert('Error', 'Unable to open website link.')
+      );
+    } else if (label === 'Refund Policy') {
+      Linking.openURL('https://krovaa.com/refund').catch(() =>
+        Alert.alert('Error', 'Unable to open website link.')
+      );
+    } else if (label === 'Cookie Policy') {
+      Linking.openURL('https://krovaa.com/cookie-policy').catch(() =>
+        Alert.alert('Error', 'Unable to open website link.')
+      );
+    } else if (label === 'Contact Us' || label === 'Contact Support') {
+      Linking.openURL('mailto:support@krovaa.com').catch(() =>
+        Alert.alert('Error', 'Unable to open mail client. Please contact support@krovaa.com.')
+      );
+    } else if (['Notifications', 'Help Center'].includes(label)) {
+      Alert.alert(label, `This option will open the ${label.toLowerCase()} screen/page.`);
+    }
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -42,21 +85,30 @@ export default function SettingsScreen() {
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
           <View style={styles.sectionCard}>
-            {section.items.map((item, index) => (
-              <TouchableOpacity
-                key={item.label}
-                style={[
-                  styles.settingItem,
-                  index < section.items.length - 1 && styles.settingItemBorder,
-                ]}
-              >
-                <View style={[styles.settingIcon, { backgroundColor: item.color + '15' }]}>
-                  <item.icon size={18} color={item.color} />
-                </View>
-                <Text style={styles.settingLabel}>{item.label}</Text>
-                <ChevronRight size={16} color={Colors.gray400} />
-              </TouchableOpacity>
-            ))}
+            {section.items.map((item, index) => {
+              const isVersion = item.label === 'App Version';
+              return (
+                <TouchableOpacity
+                  key={item.label}
+                  disabled={isVersion}
+                  onPress={() => handlePress(item.label)}
+                  style={[
+                    styles.settingItem,
+                    index < section.items.length - 1 && styles.settingItemBorder,
+                  ]}
+                >
+                  <View style={[styles.settingIcon, { backgroundColor: item.color + '15' }]}>
+                    <item.icon size={18} color={item.color} />
+                  </View>
+                  <Text style={styles.settingLabel}>{item.label}</Text>
+                  {isVersion ? (
+                    <Text style={styles.versionValue}>1.0.0</Text>
+                  ) : (
+                    <ChevronRight size={16} color={Colors.gray400} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       ))}
@@ -68,7 +120,8 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.versionText}>Version 1.0.0</Text>
+      {/* Spacing at the bottom of the list */}
+      <View style={{ height: Spacing.xxl }} />
     </ScrollView>
   );
 }
@@ -129,6 +182,11 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.medium as any,
     color: Colors.gray800,
   },
+  versionValue: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.medium as any,
+    color: Colors.gray500,
+  },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -142,12 +200,5 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     fontWeight: FontWeights.semiBold as any,
     color: Colors.error,
-  },
-  versionText: {
-    textAlign: 'center',
-    fontSize: FontSizes.xs,
-    color: Colors.gray400,
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.xxl,
   },
 });

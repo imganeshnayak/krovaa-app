@@ -8,7 +8,7 @@ import { verifyPasswordResetOtp, resetPassword } from '@/lib/authApi';
 
 export default function ForgotPasswordOtpScreen() {
   const router = useRouter();
-  const { email } = useLocalSearchParams<{ email: string }>();
+  const { email, fromSettings } = useLocalSearchParams<{ email: string; fromSettings?: string }>();
   const [step, setStep] = useState<'otp' | 'password'>('otp');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -68,7 +68,11 @@ export default function ForgotPasswordOtpScreen() {
         return;
       }
 
-      router.replace('/(auth)/login');
+      if (fromSettings === 'true') {
+        router.replace('/(tabs)/settings');
+      } else {
+        router.replace('/(auth)/login');
+      }
     } finally {
       setLoading(false);
     }
@@ -90,7 +94,9 @@ export default function ForgotPasswordOtpScreen() {
               <Ionicons name="arrow-back" size={24} color={Colors.gray900} />
             </TouchableOpacity>
 
-            <Text style={styles.title}>Enter Code</Text>
+            <Text style={styles.title}>
+              {fromSettings === 'true' ? 'Verify Identity' : 'Enter Code'}
+            </Text>
             <Text style={styles.subtitle}>We sent a code to {email}</Text>
           </View>
 
@@ -145,8 +151,12 @@ export default function ForgotPasswordOtpScreen() {
             <Ionicons name="arrow-back" size={24} color={Colors.gray900} />
           </TouchableOpacity>
 
-          <Text style={styles.title}>New Password</Text>
-          <Text style={styles.subtitle}>Enter your new password</Text>
+          <Text style={styles.title}>
+            {fromSettings === 'true' ? 'Change Password' : 'New Password'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {fromSettings === 'true' ? 'Enter a new password for your account' : 'Enter your new password'}
+          </Text>
         </View>
 
         <View style={styles.form}>
@@ -214,7 +224,11 @@ export default function ForgotPasswordOtpScreen() {
             </View>
           </View>
 
-          <Button title="Reset Password" onPress={handleResetPassword} loading={loading} />
+          <Button
+            title={fromSettings === 'true' ? 'Change Password' : 'Reset Password'}
+            onPress={handleResetPassword}
+            loading={loading}
+          />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

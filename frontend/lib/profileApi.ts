@@ -304,3 +304,26 @@ export async function rateUser(
 export async function getUserRatings(userId: string) {
   return publicRequest<RatingsResponse>(`/api/profile/ratings/${encodeURIComponent(userId)}`);
 }
+
+export interface BlockedUserDetail {
+  id: string;
+  fullName: string;
+  avatar: string;
+  username: string;
+}
+
+type BlockedUsersResponse = {
+  blockedUsers: BlockedUserDetail[];
+};
+
+export async function getBlockedUsers(token: string) {
+  return authRequest<BlockedUsersResponse>('/api/profile/blocked-list', 'GET', token);
+}
+
+export async function unblockUser(token: string, blockedUserId: string) {
+  return authRequest<{ message: string; blockedUsers: string[] }>(
+    `/api/profile/unblock/${encodeURIComponent(blockedUserId)}`,
+    'POST',
+    token
+  );
+}

@@ -22,7 +22,7 @@ model User {
   gender         String    @default("")
   profession     String    @default("none")
   bio            String    @default("")
-  avatar         String    @default("https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200")
+  avatar         String    @default("https://ui-avatars.com/api/?name=User&background=random&color=fff&size=150")
   coverPhotoUrl  String    @default("")
   userGoal       String    @default("")
   socialLinks    String    @default("[]")

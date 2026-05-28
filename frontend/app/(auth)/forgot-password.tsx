@@ -1,17 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Colors, FontWeights, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
 import { sendPasswordResetOtp } from '@/lib/authApi';
+import { useAuth } from '@/context/AuthContext';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const { fromSettings } = useLocalSearchParams<{ fromSettings?: string }>();
+  const { user } = useAuth();
+  
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (fromSettings === 'true' && user?.email) {
+      setEmail(user.email);
+    }
+  }, [fromSettings, user]);
 
   const handleSendOtp = async () => {
     setError(null);
@@ -32,7 +42,7 @@ export default function ForgotPasswordScreen() {
 
       router.push({
         pathname: '/(auth)/forgot-password-otp',
-        params: { email },
+        params: { email, fromSettings: fromSettings || '' },
       });
     } finally {
       setLoading(false);
@@ -55,8 +65,14 @@ export default function ForgotPasswordScreen() {
             <Ionicons name="arrow-back" size={24} color={Colors.gray900} />
           </TouchableOpacity>
 
-          <Text style={styles.title}>Reset Password</Text>
-          <Text style={styles.subtitle}>Enter your email to reset your password</Text>
+          <Text style={styles.title}>
+            {fromSettings === 'true' ? 'Change Password' : 'Reset Password'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {fromSettings === 'true'
+              ? 'Verify your identity to change your password'
+              : 'Enter your email to reset your password'}
+          </Text>
         </View>
 
         <View style={styles.form}>
@@ -72,18 +88,20 @@ export default function ForgotPasswordScreen() {
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
-            editable={!loading}
+            editable={!loading && fromSettings !== 'true'}
           />
 
-          <Button title="Send Reset Code" onPress={handleSendOtp} loading={loading} />
+          <Button title="Send Verification Code" onPress={handleSendOtp} loading={loading} />
         </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Remember your password? </Text>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.footerLink}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
+        {fromSettings !== 'true' && (
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Remember your password? </Text>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={styles.footerLink}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );

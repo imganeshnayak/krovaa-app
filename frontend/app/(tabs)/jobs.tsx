@@ -42,14 +42,14 @@ const JOB_MODES = [
 ];
 
 const CATEGORIES = [
-  { id: "tech",         label: "Tech",         icon: Code,        color: "text-blue-400",   bg: "bg-blue-400/10",   border: "border-blue-400/20"   },
-  { id: "creative",    label: "Creative",     icon: Palette,     color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/20" },
-  { id: "engineering", label: "Engineering",  icon: Hammer,      color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/20" },
-  { id: "professional",label: "Professional", icon: GanttChart,  color: "text-emerald-400",bg: "bg-emerald-400/10",border: "border-emerald-400/20" },
-  { id: "freelancer",  label: "Freelancer",   icon: Users,        color: "text-pink-400",   bg: "bg-pink-400/10",   border: "border-pink-400/20"   },
-  { id: "student",     label: "Student",      icon: GraduationCap,color:"text-cyan-400",   bg: "bg-cyan-400/10",   border: "border-cyan-400/20"   },
-  { id: "none",        label: "None",         icon: UserCircle,  color: "text-indigo-400", bg: "bg-indigo-400/10", border: "border-indigo-400/20" },
-  { id: "other",       label: "Other",        icon: HelpCircle,  color: "text-slate-400",   bg: "bg-slate-400/10",   border: "border-slate-400/20"   },
+  { id: "tech",         label: "Tech",         icon: Code,        color: "#60A5FA", bg: "#60A5FA1A", border: "#60A5FA33" },
+  { id: "creative",    label: "Creative",     icon: Palette,     color: "#C084FC", bg: "#C084FC1A", border: "#C084FC33" },
+  { id: "engineering", label: "Engineering",  icon: Hammer,      color: "#FB923C", bg: "#FB923C1A", border: "#FB923C33" },
+  { id: "professional",label: "Professional", icon: GanttChart,  color: "#34D399", bg: "#34D3991A", border: "#34D39933" },
+  { id: "freelancer",  label: "Freelancer",   icon: Users,        color: "#F472B6", bg: "#F472B61A", border: "#F472B633" },
+  { id: "student",     label: "Student",      icon: GraduationCap,color:"#22D3EE", bg: "#22D3EE1A", border: "#22D3EE33" },
+  { id: "none",        label: "None",         icon: UserCircle,  color: "#818CF8", bg: "#818CF81A", border: "#818CF833" },
+  { id: "other",       label: "Other",        icon: HelpCircle,  color: "#94A3B8", bg: "#94A3B81A", border: "#94A3B833" },
 ];
 
 const SUB_PROFESSIONS: Record<string, string[]> = {

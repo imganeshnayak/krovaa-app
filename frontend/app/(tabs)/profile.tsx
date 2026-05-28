@@ -13,10 +13,13 @@ import {
   MapPin,
   Edit3,
   ChevronRight,
+  ChevronLeft,
+  ChevronDown,
   Shield,
   ShieldCheck,
   Award,
   Briefcase,
+  Calendar as CalendarIcon,
   X,
   Video as VideoIcon,
   Camera as CameraIcon,
@@ -79,14 +82,14 @@ const PROFESSION_OPTIONS = ['tech', 'creative', 'engineering', 'professional', '
 const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'] as const;
 
 const CATEGORIES = [
-  { id: "tech", label: "Tech", icon: Code, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" },
-  { id: "creative", label: "Creative", icon: Palette, color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/20" },
-  { id: "engineering", label: "Engineering", icon: Hammer, color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/20" },
-  { id: "professional", label: "Professional", icon: GanttChart, color: "text-emerald-400", bg: "bg-emerald-400/10", border: "border-emerald-400/20" },
-  { id: "freelancer", label: "Freelancer", icon: Users, color: "text-pink-400", bg: "bg-pink-400/10", border: "border-pink-400/20" },
-  { id: "student", label: "Student", icon: GraduationCap, color: "text-cyan-400", bg: "bg-cyan-400/10", border: "border-cyan-400/20" },
-  { id: "none", label: "None", icon: UserCircle, color: "text-indigo-400", bg: "bg-indigo-400/10", border: "border-indigo-400/20" },
-  { id: "other", label: "Other", icon: HelpCircle, color: "text-zinc-400", bg: "bg-zinc-400/10", border: "border-zinc-400/20" },
+  { id: "tech", label: "Tech", icon: Code, color: "#60A5FA", bg: "#60A5FA1A", border: "#60A5FA33" },
+  { id: "creative", label: "Creative", icon: Palette, color: "#C084FC", bg: "#C084FC1A", border: "#C084FC33" },
+  { id: "engineering", label: "Engineering", icon: Hammer, color: "#FB923C", bg: "#FB923C1A", border: "#FB923C33" },
+  { id: "professional", label: "Professional", icon: GanttChart, color: "#34D399", bg: "#34D3991A", border: "#34D39933" },
+  { id: "freelancer", label: "Freelancer", icon: Users, color: "#F472B6", bg: "#F472B61A", border: "#F472B633" },
+  { id: "student", label: "Student", icon: GraduationCap, color: "#22D3EE", bg: "#22D3EE1A", border: "#22D3EE33" },
+  { id: "none", label: "None", icon: UserCircle, color: "#818CF8", bg: "#818CF81A", border: "#818CF833" },
+  { id: "other", label: "Other", icon: HelpCircle, color: "#94A3B8", bg: "#94A3B81A", border: "#94A3B833" },
 ];
 
 const SUB_PROFESSIONS: Record<string, string[]> = {
@@ -217,6 +220,271 @@ const getSocialIcon = (platform: string) => {
   return Globe;
 };
 
+// ─── Inline DOB Calendar Picker Helpers & Component ─────────────────────────────
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+const calculateAge = (dob: string) => {
+  const birthDate = new Date(dob);
+  if (isNaN(birthDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const md = today.getMonth() - birthDate.getMonth();
+  if (md < 0 || (md === 0 && today.getDate() < birthDate.getDate())) age--;
+  return age >= 0 ? age : null;
+};
+
+interface InlineDatePickerProps {
+  value: string;
+  onChange: (val: string) => void;
+}
+
+function InlineDatePicker({ value, onChange }: InlineDatePickerProps) {
+  const today = new Date();
+
+  const parseSelected = (): Date | null => {
+    if (!value) return null;
+    const parts = value.split('-');
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const selected = parseSelected();
+
+  const initYear = selected ? selected.getFullYear() : today.getFullYear() - 22;
+  const initMonth = selected ? selected.getMonth() : today.getMonth();
+
+  const [viewYear, setViewYear] = useState(initYear);
+  const [viewMonth, setViewMonth] = useState(initMonth);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [showYearDropdown, setShowYearDropdown] = useState(false);
+
+  const years: number[] = [];
+  for (let y = 1940; y <= today.getFullYear(); y++) years.push(y);
+
+  const firstDayOfMonth = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const daysInPrev = new Date(viewYear, viewMonth, 0).getDate();
+
+  const cells: { day: number; type: 'prev' | 'cur' | 'next' }[] = [];
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    cells.push({ day: daysInPrev - firstDayOfMonth + 1 + i, type: 'prev' });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ day: d, type: 'cur' });
+  }
+  const remaining = 7 - (cells.length % 7);
+  if (remaining < 7) {
+    for (let i = 1; i <= remaining; i++) {
+      cells.push({ day: i, type: 'next' });
+    }
+  }
+
+  const prevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear(y => y - 1);
+    } else {
+      setViewMonth(m => m - 1);
+    }
+  };
+
+  const nextMonth = () => {
+    const limit = today.getFullYear() * 12 + today.getMonth();
+    const cur = viewYear * 12 + viewMonth;
+    if (cur >= limit) return;
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear(y => y + 1);
+    } else {
+      setViewMonth(m => m + 1);
+    }
+  };
+
+  const selectDay = (day: number) => {
+    const d = new Date(viewYear, viewMonth, day);
+    if (d > today) return;
+
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    onChange(`${yyyy}-${mm}-${dd}`);
+  };
+
+  const formatDisplay = (d: Date) =>
+    d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const isSelected = (day: number) =>
+    selected &&
+    selected.getFullYear() === viewYear &&
+    selected.getMonth() === viewMonth &&
+    selected.getDate() === day;
+
+  const isToday = (day: number) =>
+    today.getFullYear() === viewYear &&
+    today.getMonth() === viewMonth &&
+    today.getDate() === day;
+
+  return (
+    <View style={styles.calendarContainer}>
+      <View style={styles.calendarHeader}>
+        <TouchableOpacity
+          onPress={prevMonth}
+          style={styles.calendarArrow}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <ChevronLeft size={16} color={Colors.gray700} />
+        </TouchableOpacity>
+
+        <View style={styles.calendarSelectors}>
+          <View style={{ relative: 'true' } as any}>
+            <TouchableOpacity
+              style={styles.selectorButton}
+              onPress={() => {
+                setShowMonthDropdown(!showMonthDropdown);
+                setShowYearDropdown(false);
+              }}
+            >
+              <Text style={styles.selectorText}>{MONTHS[viewMonth]}</Text>
+              <ChevronDown size={11} color={Colors.gray500} style={{ marginLeft: 3 }} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ relative: 'true' } as any}>
+            <TouchableOpacity
+              style={styles.selectorButton}
+              onPress={() => {
+                setShowYearDropdown(!showYearDropdown);
+                setShowMonthDropdown(false);
+              }}
+            >
+              <Text style={styles.selectorText}>{viewYear}</Text>
+              <ChevronDown size={11} color={Colors.gray500} style={{ marginLeft: 3 }} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          onPress={nextMonth}
+          disabled={viewYear * 12 + viewMonth >= today.getFullYear() * 12 + today.getMonth()}
+          style={[
+            styles.calendarArrow,
+            viewYear * 12 + viewMonth >= today.getFullYear() * 12 + today.getMonth() && { opacity: 0.25 }
+          ]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <ChevronRight size={16} color={Colors.gray700} />
+        </TouchableOpacity>
+      </View>
+
+      {showMonthDropdown && (
+        <View style={styles.dropdownListContainer}>
+          <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+            {MONTHS.map((m, i) => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.dropdownItem, viewMonth === i && styles.dropdownItemActive]}
+                onPress={() => {
+                  setViewMonth(i);
+                  setShowMonthDropdown(false);
+                }}
+              >
+                <Text style={[styles.dropdownItemText, viewMonth === i && styles.dropdownItemTextActive]}>{m}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {showYearDropdown && (
+        <View style={styles.dropdownListContainer}>
+          <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+            {years.slice().reverse().map(y => (
+              <TouchableOpacity
+                key={y}
+                style={[styles.dropdownItem, viewYear === y && styles.dropdownItemActive]}
+                onPress={() => {
+                  setViewYear(y);
+                  setShowYearDropdown(false);
+                }}
+              >
+                <Text style={[styles.dropdownItemText, viewYear === y && styles.dropdownItemTextActive]}>{y}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      <View style={styles.weekdayRow}>
+        {WEEKDAYS.map(d => (
+          <Text key={d} style={styles.weekdayText}>{d}</Text>
+        ))}
+      </View>
+
+      <View style={styles.daysGrid}>
+        {cells.map((cell, idx) => {
+          const muted = cell.type !== 'cur';
+          const future = !muted && (new Date(viewYear, viewMonth, cell.day) > today);
+          const sel = !muted && isSelected(cell.day);
+          const todayMark = !muted && isToday(cell.day);
+
+          return (
+            <TouchableOpacity
+              key={idx}
+              disabled={muted || future}
+              onPress={() => !muted && !future && selectDay(cell.day)}
+              style={[
+                styles.dayCell,
+                sel && styles.dayCellSelected,
+                todayMark && !sel && styles.dayCellToday,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.dayText,
+                  muted && styles.dayTextMuted,
+                  future && styles.dayTextMuted,
+                  sel && styles.dayTextSelected,
+                  todayMark && !sel && styles.dayTextToday,
+                ]}
+              >
+                {cell.day}
+              </Text>
+              {todayMark && !sel && (
+                <View style={styles.todayIndicatorDot} />
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={[styles.calendarBanner, selected ? styles.calendarBannerActive : styles.calendarBannerNeutral]}>
+        <CalendarIcon size={14} color={selected ? Colors.primary : Colors.gray500} style={{ marginRight: Spacing.sm }} />
+        <View style={{ flex: 1 }}>
+          {selected ? (
+            <Text style={styles.bannerActiveText}>{formatDisplay(selected)}</Text>
+          ) : (
+            <Text style={styles.bannerNeutralText}>Select your date of birth</Text>
+          )}
+        </View>
+        {selected && (() => {
+          const age = calculateAge(value);
+          return age !== null ? (
+            <View style={styles.ageBadge}>
+              <Text style={styles.ageBadgeText}>{age} yrs</Text>
+            </View>
+          ) : null;
+        })()}
+      </View>
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const { session, user: currentUser, loading: authLoading, signInDev } = useAuth() as any;
   const params = useLocalSearchParams<{ userId?: string }>();
@@ -232,6 +500,7 @@ export default function ProfileScreen() {
   const [editLoading, setEditLoading] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editDob, setEditDob] = useState('');
   const [postsLoading, setPostsLoading] = useState(true);
   const [postUploading, setPostUploading] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
@@ -453,7 +722,7 @@ export default function ProfileScreen() {
     coverPhoto: '',
   });
 
-    useEffect(() => {
+  useEffect(() => {
     let isMounted = true;
 
     async function fetchProfile() {
@@ -719,53 +988,57 @@ export default function ProfileScreen() {
     }
   }, [loading, profile, error, fadeAnim]);
 
-const handleOpenEditModal = () => {
-  if (profile) {
-    // Set selected category and custom profession based on current profession
-    let selectedCategory = '';
-    let customProfession = '';
-    
-    if (profile.profession) {
-      if (profile.profession === "none") selectedCategory = "none";
-      else if (profile.profession === "freelancer") selectedCategory = "freelancer";
-      else if (profile.profession === "student") selectedCategory = "student";
-      else {
-        let found = false;
-        for (const [cat, subProfs] of Object.entries(SUB_PROFESSIONS)) {
-          if (subProfs.includes(profile.profession)) {
-            selectedCategory = cat;
-            found = true;
-            break;
+  const handleOpenEditModal = () => {
+    if (profile) {
+      // Set selected category and custom profession based on current profession
+      let selectedCategory = '';
+      let customProfession = '';
+
+      if (profile.profession) {
+        if (profile.profession === "none") selectedCategory = "none";
+        else if (profile.profession === "freelancer") selectedCategory = "freelancer";
+        else if (profile.profession === "student") selectedCategory = "student";
+        else {
+          let found = false;
+          for (const [cat, subProfs] of Object.entries(SUB_PROFESSIONS)) {
+            if (subProfs.includes(profile.profession)) {
+              selectedCategory = cat;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            selectedCategory = "other";
+            customProfession = profile.profession;
           }
         }
-        if (!found) {
-          selectedCategory = "other";
-          customProfession = profile.profession;
-        }
       }
+
+      const displayPhone = profile.phoneNumber ? profile.phoneNumber.replace('+91', '') : '';
+      const defaultDob = profile.age ? `${new Date().getFullYear() - profile.age}-01-01` : '';
+
+      setEditForm({
+        fullName: profile.fullName,
+        city: profile.city || profile.location || '',
+        pincode: profile.pincode || '',
+        phoneNumber: displayPhone,
+        age: profile.age !== null && profile.age !== undefined ? String(profile.age) : '',
+        gender: profile.gender || '',
+        profession: profile.profession || 'none',
+        skillsText: profile.skills.join(', '),
+        bio: profile.bio,
+        avatar: profile.avatar,
+        coverPhoto: profile.coverPhotoUrl || '',
+        userGoal: profile.userGoal || '',
+        socialLinks: profile.socialLinks || [],
+        selectedCategory,
+        customProfession
+      });
+      setEditDob(defaultDob);
+      setEditError(null);
+      setShowEditModal(true);
     }
-    
-    setEditForm({
-      fullName: profile.fullName,
-      city: profile.city || profile.location || '',
-      pincode: profile.pincode || '',
-      phoneNumber: profile.phoneNumber || '',
-      age: profile.age !== null && profile.age !== undefined ? String(profile.age) : '',
-      gender: profile.gender || '',
-      profession: profile.profession || 'none',
-      skillsText: profile.skills.join(', '),
-      bio: profile.bio,
-      avatar: profile.avatar,
-      coverPhoto: profile.coverPhotoUrl || '',
-      userGoal: profile.userGoal || '',
-      socialLinks: profile.socialLinks || [],
-      selectedCategory,
-      customProfession
-    });
-    setEditError(null);
-    setShowEditModal(true);
-  }
-};
+  };
 
   const handleCloseEditModal = () => {
     setShowEditModal(false);
@@ -786,6 +1059,7 @@ const handleOpenEditModal = () => {
       selectedCategory: '',
       coverPhoto: '',
     });
+    setEditDob('');
     setEditError(null);
   };
 
@@ -815,89 +1089,92 @@ const handleOpenEditModal = () => {
     setPostForm({ text: '', attachments: [], caption: '', mediaItems: [] });
   };
 
-    const handleSaveProfile = async () => {
-      if (!session?.access_token || !profile) return;
+  const handleSaveProfile = async () => {
+    if (!session?.access_token || !profile) return;
 
-      if (!editForm.fullName.trim()) {
-        setEditError('Full name is required');
+    if (!editForm.fullName.trim()) {
+      setEditError('Full name is required');
+      return;
+    }
+
+    if (editForm.pincode && !/^\d{4,10}$/.test(editForm.pincode.trim())) {
+      setEditError('Pincode must be 4 to 10 digits.');
+      return;
+    }
+
+    if (editForm.phoneNumber) {
+      const trimmedPhone = editForm.phoneNumber.trim();
+      if (!/^[6-9]\d{9}$/.test(trimmedPhone)) {
+        setEditError('Phone number must be a valid 10-digit Indian number.');
         return;
       }
+    }
 
-      if (editForm.pincode && !/^\d{4,10}$/.test(editForm.pincode.trim())) {
-        setEditError('Pincode must be 4 to 10 digits.');
+    let parsedAge: number | null = null;
+    if (editForm.age.trim()) {
+      parsedAge = Number(editForm.age.trim());
+      if (!Number.isFinite(parsedAge) || parsedAge < 0 || parsedAge > 120) {
+        setEditError('Age must be a number between 0 and 120.');
         return;
       }
+    }
 
-      if (editForm.phoneNumber && !/^\+?[0-9]{7,15}$/.test(editForm.phoneNumber.trim())) {
-        setEditError('Phone number must be 7 to 15 digits (optional + prefix).');
-        return;
+    const skills = editForm.skillsText
+      .split(',')
+      .map((skill) => skill.trim())
+      .filter(Boolean);
+
+    const socialLinks = editForm.socialLinks
+      .map((link) => ({
+        platform: String(link.platform || '').trim().toLowerCase(),
+        url: normalizeUrl(link.url),
+      }))
+      .filter((link) => link.platform && link.url);
+
+    let finalProfession: string = editForm.profession;
+    if (editForm.selectedCategory === "none") finalProfession = "none";
+    else if (editForm.selectedCategory === "freelancer") finalProfession = "freelancer";
+    else if (editForm.selectedCategory === "student") finalProfession = "student";
+    else if (editForm.selectedCategory === "other") finalProfession = editForm.customProfession || "other";
+    else if (editForm.profession === "other") finalProfession = editForm.customProfession || "other";
+
+    const normalizedGoal = editForm.userGoal === 'OFFER_SERVICE' || editForm.userGoal === 'HIRE_PROFESSIONALS'
+      ? editForm.userGoal
+      : '';
+
+    setEditLoading(true);
+    setEditError(null);
+
+    try {
+      const { data, error } = await updateUserProfile(session.access_token, {
+        fullName: editForm.fullName.trim(),
+        location: editForm.city.trim(),
+        city: editForm.city.trim(),
+        pincode: editForm.pincode.trim(),
+        phoneNumber: editForm.phoneNumber.trim() ? (editForm.phoneNumber.trim().startsWith('+91') ? editForm.phoneNumber.trim() : '+91' + editForm.phoneNumber.trim()) : '',
+        age: parsedAge,
+        gender: editForm.gender.trim(),
+        profession: finalProfession as any,
+        skills,
+        bio: editForm.bio.trim(),
+        avatar: editForm.avatar,
+        coverPhotoUrl: editForm.coverPhoto || undefined,
+        userGoal: normalizedGoal,
+        socialLinks,
+      });
+
+      if (error) {
+        setEditError(error);
+      } else if (data) {
+        setProfile(data.user);
+        handleCloseEditModal();
       }
-
-      let parsedAge: number | null = null;
-      if (editForm.age.trim()) {
-        parsedAge = Number(editForm.age.trim());
-        if (!Number.isFinite(parsedAge) || parsedAge < 0 || parsedAge > 120) {
-          setEditError('Age must be a number between 0 and 120.');
-          return;
-        }
-      }
-
-      const skills = editForm.skillsText
-        .split(',')
-        .map((skill) => skill.trim())
-        .filter(Boolean);
-
-      const socialLinks = editForm.socialLinks
-        .map((link) => ({
-          platform: String(link.platform || '').trim().toLowerCase(),
-          url: normalizeUrl(link.url),
-        }))
-        .filter((link) => link.platform && link.url);
-
-      let finalProfession: string = editForm.profession;
-      if (editForm.selectedCategory === "none") finalProfession = "none";
-      else if (editForm.selectedCategory === "freelancer") finalProfession = "freelancer";
-      else if (editForm.selectedCategory === "student") finalProfession = "student";
-      else if (editForm.selectedCategory === "other") finalProfession = editForm.customProfession || "other";
-      else if (editForm.profession === "other") finalProfession = editForm.customProfession || "other";
-
-      const normalizedGoal = editForm.userGoal === 'OFFER_SERVICE' || editForm.userGoal === 'HIRE_PROFESSIONALS'
-        ? editForm.userGoal
-        : '';
-
-      setEditLoading(true);
-      setEditError(null);
-
-      try {
-        const { data, error } = await updateUserProfile(session.access_token, {
-          fullName: editForm.fullName.trim(),
-          location: editForm.city.trim(),
-          city: editForm.city.trim(),
-          pincode: editForm.pincode.trim(),
-          phoneNumber: editForm.phoneNumber.trim(),
-          age: parsedAge,
-          gender: editForm.gender.trim(),
-          profession: finalProfession as any,
-          skills,
-          bio: editForm.bio.trim(),
-          avatar: editForm.avatar,
-          coverPhotoUrl: editForm.coverPhoto || undefined,
-          userGoal: normalizedGoal,
-          socialLinks,
-        });
-
-        if (error) {
-          setEditError(error);
-        } else if (data) {
-          setProfile(data.user);
-          handleCloseEditModal();
-        }
-      } catch (err) {
-        setEditError('Failed to update profile');
-      } finally {
-        setEditLoading(false);
-      }
-    };
+    } catch (err) {
+      setEditError('Failed to update profile');
+    } finally {
+      setEditLoading(false);
+    }
+  };
 
   const addSocialLink = () => {
     setEditForm((prev) => ({
@@ -1478,7 +1755,7 @@ const handleOpenEditModal = () => {
         }}
       >
         <View style={styles.headerBg}>
-          <View style={[styles.coverSection, { height: coverHeight }] }>
+          <View style={[styles.coverSection, { height: coverHeight }]}>
             {localCoverPreview ? (
               <Image source={{ uri: localCoverPreview }} style={[styles.coverImage, { height: coverHeight }]} />
             ) : profile.coverPhotoUrl ? (
@@ -1522,7 +1799,7 @@ const handleOpenEditModal = () => {
           <View style={[styles.profileSection, { paddingHorizontal: isTablet ? Spacing.xl : Spacing.lg, marginTop: isTablet ? -60 : -46 }]}>
             <View style={styles.avatarContainer}>
               <View style={[styles.avatarWrapper, { width: avatarSize + 8, height: avatarSize + 8, borderRadius: (avatarSize + 8) / 2 }]}>
-                {getImageSource(localAvatarPreview || profile.avatar) ? (
+                {localAvatarPreview || (profile.avatar && !profile.avatar.includes('ui-avatars.com') && !profile.avatar.includes('pexels.com')) ? (
                   <Image
                     source={getImageSource(localAvatarPreview || profile.avatar)!}
                     style={[styles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
@@ -1544,24 +1821,25 @@ const handleOpenEditModal = () => {
                     <CameraIcon size={24} color={Colors.gray500} />
                   </View>
                 )}
+              </View>
+              {isOwnProfile && (
                 <TouchableOpacity style={styles.avatarOverlay} activeOpacity={0.8} onPress={handleOpenEditModal}>
                   <View style={styles.avatarCameraBadge}>
-                    <CameraIcon size={16} color={Colors.white} />
+                    <Edit3 size={16} color={Colors.white} />
                   </View>
                 </TouchableOpacity>
-              </View>
+              )}
             </View>
 
-            <Text style={styles.name}>{profile.fullName}</Text>
-            <View style={styles.locationRow}>
-              <MapPin size={14} color={Colors.gray600} />
-              <Text style={styles.location}>{profile.city || profile.location || 'Not set'}</Text>
-            </View>
-            {!!profile.profession && profile.profession !== 'none' && (
-              <Text style={styles.professionText}>{formatProfessionLabel(profile.profession)}</Text>
+            {profile.fullName && profile.fullName !== 'User' ? (
+              <>
+                <Text style={styles.name}>{profile.fullName}</Text>
+                <Text style={styles.username}>@{profile.username}</Text>
+              </>
+            ) : (
+              <Text style={styles.name}>@{profile.username}</Text>
             )}
-            {!!profile.phoneNumber && <Text style={styles.subInfo}>{profile.phoneNumber}</Text>}
-            <Text style={styles.email}>{profile.email}</Text>
+
 
             <View style={styles.headerMetaRow}>
               {profile.userCode && (
@@ -1618,183 +1896,193 @@ const handleOpenEditModal = () => {
           </View>
         </View>
 
-      {/* Rest of the UI remains the same */}
-      <View style={styles.statsRow}>
-        {STATS.map((stat) => (
-          <View key={stat.label} style={styles.statItem}>
-            <Text style={styles.statValue}>{stat.value}</Text>
-            <Text style={styles.statLabel}>{stat.label}</Text>
-          </View>
-        ))}
-      </View>
-      
-      <View style={styles.postsSection}>
-        <View style={styles.postsHeader}>
-          <Text style={styles.postsTitle}>My Posts</Text>
-          <TouchableOpacity style={styles.addPostButton} onPress={handleOpenPostModal} activeOpacity={0.8}>
-            <Text style={styles.addPostButtonText}>Upload</Text>
-          </TouchableOpacity>
+        {/* Rest of the UI remains the same */}
+        <View style={styles.statsRow}>
+          {STATS.map((stat) => (
+            <View key={stat.label} style={styles.statItem}>
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
         </View>
 
-        {postsLoading && (
-          <View style={styles.postsStateWrap}>
-            <ActivityIndicator size="small" color={Colors.primary} />
+        <View style={styles.postsSection}>
+          <View style={styles.postsHeader}>
+            <Text style={styles.postsTitle}>My Posts</Text>
+            <TouchableOpacity style={styles.addPostButton} onPress={handleOpenPostModal} activeOpacity={0.8}>
+              <Text style={styles.addPostButtonText}>Upload</Text>
+            </TouchableOpacity>
           </View>
-        )}
 
-        {!postsLoading && !!postsError && (
-          <Text style={styles.postsErrorText}>{postsError}</Text>
-        )}
+          {postsLoading && (
+            <View style={styles.postsStateWrap}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+            </View>
+          )}
 
-        {!postsLoading && !postsError && posts.length === 0 && (
-          <Text style={styles.postsEmptyText}>No posts yet. Share your previous works and achievements.</Text>
-        )}
+          {!postsLoading && !!postsError && (
+            <Text style={styles.postsErrorText}>{postsError}</Text>
+          )}
 
-        {!postsLoading && !postsError && posts.length > 0 && (
-          <View style={styles.postsGrid}>
-            {posts.map((post, index) => {
-              const itemOpacity = gridItemOpacities.current[index] || new Animated.Value(1);
-              return (
-                <Animated.View
-                  key={post.id}
-                  style={[styles.postCardWrap, { width: postTileSize, height: postTileSize, opacity: itemOpacity }]}
-                >
-                  <TouchableOpacity
-                    style={styles.postCard}
-                    activeOpacity={0.95}
-                    onPress={() => {
-                      setSelectedPostIndex(index);
-                      setShowFullscreenViewer(true);
-                    }}
-                    onLongPress={() => {
-                      setSelectedPostForAction(post);
-                      setShowPostActionSheet(true);
-                    }}
+          {!postsLoading && !postsError && posts.length === 0 && (
+            <Text style={styles.postsEmptyText}>No posts yet. Share your previous works and achievements.</Text>
+          )}
+
+          {!postsLoading && !postsError && posts.length > 0 && (
+            <View style={styles.postsGrid}>
+              {posts.map((post, index) => {
+                const itemOpacity = gridItemOpacities.current[index] || new Animated.Value(1);
+                return (
+                  <Animated.View
+                    key={post.id}
+                    style={[styles.postCardWrap, { width: postTileSize, height: postTileSize, opacity: itemOpacity }]}
                   >
-                    {post.mediaType === 'image' ? (
-                      <Image
-                        source={{ uri: post.mediaUrl }}
-                        style={styles.postImage}
-                      />
-                    ) : (
-                      <View style={styles.postVideoThumb}>
-                        <Video
+                    <TouchableOpacity
+                      style={styles.postCard}
+                      activeOpacity={0.95}
+                      onPress={() => {
+                        setSelectedPostIndex(index);
+                        setShowFullscreenViewer(true);
+                      }}
+                      onLongPress={() => {
+                        setSelectedPostForAction(post);
+                        setShowPostActionSheet(true);
+                      }}
+                    >
+                      {post.mediaType === 'image' ? (
+                        <Image
                           source={{ uri: post.mediaUrl }}
-                          style={styles.postVideoPlayer}
-                          resizeMode={ResizeMode.COVER}
-                          isLooping
-                          shouldPlay={false}
+                          style={styles.postImage}
                         />
-                        <View style={styles.postVideoPlayOverlay}>
-                          <VideoIcon size={24} color={Colors.white} />
+                      ) : (
+                        <View style={styles.postVideoThumb}>
+                          <Video
+                            source={{ uri: post.mediaUrl }}
+                            style={styles.postVideoPlayer}
+                            resizeMode={ResizeMode.COVER}
+                            isLooping
+                            shouldPlay={false}
+                          />
+                          <View style={styles.postVideoPlayOverlay}>
+                            <VideoIcon size={24} color={Colors.white} />
+                          </View>
                         </View>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                </Animated.View>
-              );
-            })}
-          </View>
-        )}
-      </View>
-
-      <View style={styles.menuSection}>
-        {MENU_ITEMS.map((item) => (
-          <TouchableOpacity key={item.label} style={styles.menuItem} activeOpacity={0.75} onPress={() => handleMenuPress(item.label)}>
-            <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}>
-              <item.icon size={20} color={item.color} />
+                      )}
+                    </TouchableOpacity>
+                  </Animated.View>
+                );
+              })}
             </View>
-            <Text style={styles.menuLabel}>{item.label}</Text>
-            <ChevronRight size={18} color={Colors.gray400} />
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.bioSection}>
-        <Text style={styles.bioTitle}>About</Text>
-        <Text style={styles.bioText}>
-          {profile.bio}
-        </Text>
-      </View>
-
-      <View style={styles.skillsSection}>
-        <Text style={styles.skillsTitle}>Skills</Text>
-        <View style={styles.skillsRow}>
-          {profile.skills.length > 0 ? profile.skills.map((skill: any) => (
-            <View key={skill} style={styles.skillChip}>
-              <Text style={styles.skillText}>{skill}</Text>
-            </View>
-          )) : <Text style={styles.emptySkillsText}>No skills added yet.</Text>}
+          )}
         </View>
-      </View>
 
-      {isOwnProfile && !isEditing && (
-        <View style={styles.profileInfoSection}>
-          <Text style={styles.profileInfoSectionLabel}>Profile Information</Text>
-
-          <View style={styles.profileInfoGrid}>
-            <View style={styles.profileInfoCard}>
-              <View style={styles.profileInfoCardHeader}>
-                <View style={[styles.profileInfoAccent, { backgroundColor: '#22C55E' }]} />
-                <Text style={styles.profileInfoCardLabel}>Personal Details</Text>
+        <View style={styles.menuSection}>
+          {MENU_ITEMS.map((item) => (
+            <TouchableOpacity key={item.label} style={styles.menuItem} activeOpacity={0.75} onPress={() => handleMenuPress(item.label)}>
+              <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}>
+                <item.icon size={20} color={item.color} />
               </View>
+              <Text style={styles.menuLabel}>{item.label}</Text>
+              <ChevronRight size={18} color={Colors.gray400} />
+            </TouchableOpacity>
+          ))}
+        </View>
 
-              <View style={styles.profileInfoRow}>
-                <View style={styles.profileInfoCell}>
-                  <Text style={styles.profileInfoKey}>Age</Text>
-                  <Text style={styles.profileInfoValue}>{profile.age ?? '—'}</Text>
+        <View style={styles.bioSection}>
+          <Text style={styles.bioTitle}>About</Text>
+          <Text style={styles.bioText}>
+            {profile.bio}
+          </Text>
+        </View>
+
+        <View style={styles.skillsSection}>
+          <Text style={styles.skillsTitle}>Skills</Text>
+          <View style={styles.skillsRow}>
+            {profile.skills.length > 0 ? profile.skills.map((skill: any) => (
+              <View key={skill} style={styles.skillChip}>
+                <Text style={styles.skillText}>{skill}</Text>
+              </View>
+            )) : <Text style={styles.emptySkillsText}>No skills added yet.</Text>}
+          </View>
+        </View>
+
+        {!isEditing && (
+          <View style={styles.profileInfoSection}>
+            <Text style={styles.profileInfoSectionLabel}>Profile Information</Text>
+
+            <View style={styles.profileInfoGrid}>
+              <View style={styles.profileInfoCard}>
+                <View style={styles.profileInfoCardHeader}>
+                  <View style={[styles.profileInfoAccent, { backgroundColor: '#22C55E' }]} />
+                  <Text style={styles.profileInfoCardLabel}>Personal Details</Text>
                 </View>
-                <View style={styles.profileInfoCell}>
-                  <Text style={styles.profileInfoKey}>Gender</Text>
-                  <Text style={styles.profileInfoValue}>{profile.gender || '—'}</Text>
+
+                <View style={styles.profileInfoRow}>
+                  <View style={styles.profileInfoCell}>
+                    <Text style={styles.profileInfoKey}>Age</Text>
+                    <Text style={styles.profileInfoValue}>{profile.age ?? '—'}</Text>
+                  </View>
+                  <View style={styles.profileInfoCell}>
+                    <Text style={styles.profileInfoKey}>Gender</Text>
+                    <Text style={styles.profileInfoValue}>{profile.gender || '—'}</Text>
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.profileInfoDivider} />
+                <View style={styles.profileInfoDivider} />
 
-              <View style={styles.profileInfoItem}>
-                <View style={styles.profileInfoInlineRow}>
-                  <MapPin size={13} color={Colors.gray500} />
-                  <Text style={styles.profileInfoValue}>
-                    {profile.city || profile.location || 'Not set'}
-                    {profile.pincode ? ` (${profile.pincode})` : ''}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.profileInfoCard}>
-              <View style={styles.profileInfoCardHeader}>
-                <View style={[styles.profileInfoAccent, { backgroundColor: Colors.primary }]} />
-                <Text style={styles.profileInfoCardLabel}>Identity & Contact</Text>
-              </View>
-
-              <View style={styles.profileInfoItem}>
-                <Text style={styles.profileInfoKey}>Username</Text>
-                <View style={styles.profileInfoInlineRow}>
-                  <Text style={styles.profileInfoValue}>@{profile.username}</Text>
-                  <View style={styles.profileInfoPill}>
-                    <Text style={styles.profileInfoPillText}>Verified</Text>
+                <View style={styles.profileInfoItem}>
+                  <View style={styles.profileInfoInlineRow}>
+                    <MapPin size={13} color={Colors.gray500} />
+                    <Text style={styles.profileInfoValue}>
+                      {profile.city || profile.location || 'Not set'}
+                      {profile.pincode ? ` (${profile.pincode})` : ''}
+                    </Text>
                   </View>
                 </View>
               </View>
 
-              {!!profile.phoneNumber && (
-                <View style={styles.profileInfoItem}>
-                  <Text style={styles.profileInfoKey}>Phone</Text>
-                  <Text style={styles.profileInfoValueEmphasis}>{profile.phoneNumber}</Text>
+              <View style={styles.profileInfoCard}>
+                <View style={styles.profileInfoCardHeader}>
+                  <View style={[styles.profileInfoAccent, { backgroundColor: Colors.primary }]} />
+                  <Text style={styles.profileInfoCardLabel}>Identity & Contact</Text>
                 </View>
-              )}
 
-              <View style={styles.profileInfoItem}>
-                <Text style={styles.profileInfoKey}>Email</Text>
-                <Text style={styles.profileInfoValue}>{profile.email}</Text>
+                <View style={styles.profileInfoItem}>
+                  <Text style={styles.profileInfoKey}>Username</Text>
+                  <View style={styles.profileInfoInlineRow}>
+                    <Text style={styles.profileInfoValue}>@{profile.username}</Text>
+                    <View style={styles.profileInfoPill}>
+                      <Text style={styles.profileInfoPillText}>Verified</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {!!profile.profession && profile.profession !== 'none' && (
+                  <View style={styles.profileInfoItem}>
+                    <Text style={styles.profileInfoKey}>Profession</Text>
+                    <Text style={styles.profileInfoValueEmphasis}>{formatProfessionLabel(profile.profession)}</Text>
+                  </View>
+                )}
+
+                {!!profile.phoneNumber && (
+                  <View style={styles.profileInfoItem}>
+                    <Text style={styles.profileInfoKey}>Phone</Text>
+                    <Text style={styles.profileInfoValueEmphasis}>{profile.phoneNumber}</Text>
+                  </View>
+                )}
+                <View style={styles.locationRow}>
+                  <MapPin size={14} color={Colors.gray600} />
+                  <Text style={styles.location}>location {profile.city || profile.location || 'Not set'}</Text>
+                </View>
+                <View style={styles.profileInfoItem}>
+                  <Text style={styles.profileInfoKey}>Email</Text>
+                  <Text style={styles.profileInfoValue}>{profile.email}</Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
-      )}
-{/* 
+        )}
+        {/* 
       <View style={styles.postsSection}>
         <View style={styles.postsHeader}>
           <Text style={styles.postsTitle}>My Posts</Text>
@@ -1837,1038 +2125,996 @@ const handleOpenEditModal = () => {
         )}
       </View> */}
 
-      {/* Edit Profile Modal */}
-      <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={handleCloseEditModal}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView style={styles.editModalKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={styles.modalContent}>
-              <View style={styles.editModalHeader}>
-                <TouchableOpacity onPress={handleCloseEditModal} activeOpacity={0.8} style={styles.editHeaderIconButton}>
-                  <X size={22} color={Colors.gray800} />
-                </TouchableOpacity>
-                <View style={styles.editModalHeaderCopy}>
-                  <Text style={styles.modalTitle}>Edit Profile</Text>
-                  <Text style={styles.editModalSubtitle}>Update your visuals, identity, and public details.</Text>
-                </View>
-                <View style={styles.editHeaderSpacer} />
-              </View>
-
-              {editError && (
-                <View style={styles.errorBox}>
-                  <Text style={styles.errorBoxText}>{editError}</Text>
-                </View>
-              )}
-
-              <ScrollView
-                style={styles.formContent}
-                contentContainerStyle={styles.editScrollContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                <View style={styles.editHeroCard}>
-                  <TouchableOpacity activeOpacity={0.92} onPress={() => setShowCoverSheet(true)}>
-                    <View style={styles.editCoverStage}>
-                      {editableCoverSource ? (
-                        <Image source={editableCoverSource} style={styles.editCoverImage} />
-                      ) : (
-                        <View style={styles.editCoverPlaceholderStage}>
-                          <CameraIcon size={28} color={Colors.gray400} />
-                          <Text style={styles.editCoverPlaceholderText}>Add a cover photo</Text>
-                          <Text style={styles.editCoverPlaceholderSubtext}>16:9 banner recommended</Text>
-                        </View>
-                      )}
-                      <View style={styles.editCoverShade} />
-                      <View style={styles.editCoverActionPill}>
-                        <CameraIcon size={14} color={Colors.white} />
-                        <Text style={styles.editCoverActionText}>{editableCoverSource ? 'Change Cover' : 'Add Cover'}</Text>
-                      </View>
-                    </View>
+        {/* Edit Profile Modal */}
+        <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={handleCloseEditModal}>
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView style={styles.editModalKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              <View style={styles.modalContent}>
+                <View style={styles.editModalHeader}>
+                  <TouchableOpacity onPress={handleCloseEditModal} activeOpacity={0.8} style={styles.editHeaderIconButton}>
+                    <X size={22} color={Colors.gray800} />
                   </TouchableOpacity>
+                  <View style={styles.editModalHeaderCopy}>
+                    <Text style={styles.modalTitle}>Edit Profile</Text>
+                    <Text style={styles.editModalSubtitle}>Update your visuals, identity, and public details.</Text>
+                  </View>
+                  <View style={styles.editHeaderSpacer} />
+                </View>
 
-                  <View style={styles.editAvatarOverlapRow}>
-                    <TouchableOpacity activeOpacity={0.9} onPress={() => setShowAvatarSheet(true)}>
-                      <View style={styles.editAvatarStack}>
-                        {editableAvatarSource ? (
-                          <Image source={editableAvatarSource} style={styles.editAvatarImage} />
+                {editError && (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorBoxText}>{editError}</Text>
+                  </View>
+                )}
+
+                <ScrollView
+                  style={styles.formContent}
+                  contentContainerStyle={styles.editScrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.editHeroCard}>
+                    <TouchableOpacity activeOpacity={0.92} onPress={() => setShowCoverSheet(true)}>
+                      <View style={styles.editCoverStage}>
+                        {editableCoverSource ? (
+                          <Image source={editableCoverSource} style={styles.editCoverImage} />
                         ) : (
-                          <View style={styles.editAvatarFallback}>
-                            <CameraIcon size={24} color={Colors.gray500} />
+                          <View style={styles.editCoverPlaceholderStage}>
+                            <CameraIcon size={28} color={Colors.gray400} />
+                            <Text style={styles.editCoverPlaceholderText}>Add a cover photo</Text>
+                            <Text style={styles.editCoverPlaceholderSubtext}>16:9 banner recommended</Text>
                           </View>
                         )}
-                        <View style={styles.editAvatarBadge}>
+                        <View style={styles.editCoverShade} />
+                        <View style={styles.editCoverActionPill}>
                           <CameraIcon size={14} color={Colors.white} />
+                          <Text style={styles.editCoverActionText}>{editableCoverSource ? 'Change Cover' : 'Add Cover'}</Text>
                         </View>
                       </View>
                     </TouchableOpacity>
-                  </View>
 
-                  <View style={styles.editHeroCopy}>
-                    <Text style={styles.editHeroName}>{profile.fullName}</Text>
-                    <Text style={styles.editHeroDescription}>Tap the banner or avatar to update your profile visuals first.</Text>
-                  </View>
-                </View>
-
-                <View style={styles.editContentCard}>
-                  <View style={styles.formSectionHeader}>
-                    <Text style={styles.formSectionHeaderText}>Profile Information</Text>
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Full Name</Text>
-                    <TextInput
-                      style={styles.formInput}
-                      placeholder="Enter your full name"
-                      value={editForm.fullName}
-                      onChangeText={(text) => setEditForm({ ...editForm, fullName: text })}
-                      placeholderTextColor={Colors.gray400}
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>City</Text>
-                    <TextInput
-                      style={styles.formInput}
-                      placeholder="Enter your city"
-                      value={editForm.city}
-                      onChangeText={(text) => setEditForm({ ...editForm, city: text })}
-                      placeholderTextColor={Colors.gray400}
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Pincode</Text>
-                    <TextInput
-                      style={styles.formInput}
-                      placeholder="Enter pincode"
-                      value={editForm.pincode}
-                      onChangeText={(text) => setEditForm({ ...editForm, pincode: text })}
-                      placeholderTextColor={Colors.gray400}
-                      keyboardType="number-pad"
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Phone Number</Text>
-                    <TextInput
-                      style={styles.formInput}
-                      placeholder="Enter phone number"
-                      value={editForm.phoneNumber}
-                      onChangeText={(text) => setEditForm({ ...editForm, phoneNumber: text })}
-                      placeholderTextColor={Colors.gray400}
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Age</Text>
-                    <TextInput
-                      style={styles.formInput}
-                      placeholder="Enter age"
-                      value={editForm.age}
-                      onChangeText={(text) => setEditForm({ ...editForm, age: text })}
-                      placeholderTextColor={Colors.gray400}
-                      keyboardType="number-pad"
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Gender</Text>
-                    <View style={styles.optionWrap}>
-                      {GENDER_OPTIONS.map((option) => {
-                        const selected = editForm.gender.toLowerCase() === option.toLowerCase();
-                        return (
-                          <TouchableOpacity
-                            key={option}
-                            style={[styles.optionChip, selected && styles.optionChipSelected]}
-                            onPress={() => setEditForm({ ...editForm, gender: option })}
-                            activeOpacity={0.75}
-                          >
-                            <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>{option}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Profession</Text>
-
-                    <View style={styles.categoryWrap}>
-                      {CATEGORIES.map((cat) => (
-                        <TouchableOpacity
-                          key={cat.id}
-                          activeOpacity={0.7}
-                          onPress={() => {
-                            setEditForm((prev) => ({
-                              ...prev,
-                              selectedCategory: cat.id,
-                              profession: 'none',
-                              customProfession: '',
-                            }));
-                          }}
-                          style={[styles.categoryChip, editForm.selectedCategory === cat.id && styles.optionChipSelected]}
-                        >
-                          <View style={styles.categoryChipInner}>
-                            <cat.icon size={16} color={cat.color.replace('text-', '').replace('-400', '600')} />
-                            <Text style={[styles.categoryChipText, editForm.selectedCategory === cat.id && styles.optionChipTextSelected]}>{cat.label}</Text>
+                    <View style={styles.editAvatarOverlapRow}>
+                      <TouchableOpacity activeOpacity={0.9} onPress={() => setShowAvatarSheet(true)}>
+                        <View style={styles.editAvatarStack}>
+                          {localAvatarPreview || (editForm.avatar && !editForm.avatar.includes('ui-avatars.com') && !editForm.avatar.includes('pexels.com')) ? (
+                            <Image source={getImageSource(localAvatarPreview || editForm.avatar || profile.avatar)!} style={styles.editAvatarImage} />
+                          ) : (
+                            <View style={styles.editAvatarFallback}>
+                              <CameraIcon size={24} color={Colors.gray500} />
+                            </View>
+                          )}
+                          <View style={styles.editAvatarBadge}>
+                            <CameraIcon size={14} color={Colors.white} />
                           </View>
-                        </TouchableOpacity>
-                      ))}
+                        </View>
+                      </TouchableOpacity>
                     </View>
 
-                    {editForm.selectedCategory && SUB_PROFESSIONS[editForm.selectedCategory] && (
-                      <View style={styles.inlineBlockSpacing}>
-                        <Text style={styles.inlineBlockLabel}>Select Expertise</Text>
-                        <View style={styles.optionWrap}>
-                          {SUB_PROFESSIONS[editForm.selectedCategory].map((prof) => (
+                    <View style={styles.editHeroCopy}>
+                      <Text style={styles.editHeroName}>
+                        {profile.fullName && profile.fullName !== 'User' ? profile.fullName : `@${profile.username}`}
+                      </Text>
+                      <Text style={styles.editHeroDescription}>Tap the banner or avatar to update your profile visuals first.</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.editContentCard}>
+                    <View style={styles.formSectionHeader}>
+                      <Text style={styles.formSectionHeaderText}>Profile Information</Text>
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>Full Name</Text>
+                      <TextInput
+                        style={styles.formInput}
+                        placeholder="Enter your full name"
+                        value={editForm.fullName}
+                        onChangeText={(text) => setEditForm({ ...editForm, fullName: text })}
+                        placeholderTextColor={Colors.gray400}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>City</Text>
+                      <TextInput
+                        style={styles.formInput}
+                        placeholder="Enter your city"
+                        value={editForm.city}
+                        onChangeText={(text) => setEditForm({ ...editForm, city: text })}
+                        placeholderTextColor={Colors.gray400}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>Pincode</Text>
+                      <TextInput
+                        style={styles.formInput}
+                        placeholder="Enter pincode"
+                        value={editForm.pincode}
+                        onChangeText={(text) => setEditForm({ ...editForm, pincode: text })}
+                        placeholderTextColor={Colors.gray400}
+                        keyboardType="number-pad"
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>Phone Number</Text>
+                      <TextInput
+                        style={styles.formInput}
+                        placeholder="Enter phone number"
+                        value={editForm.phoneNumber}
+                        onChangeText={(text) => setEditForm({ ...editForm, phoneNumber: text })}
+                        placeholderTextColor={Colors.gray400}
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>Date of Birth</Text>
+                      <InlineDatePicker
+                        value={editDob}
+                        onChange={(val) => {
+                          setEditDob(val);
+                          const calculated = calculateAge(val);
+                          if (calculated !== null) {
+                            setEditForm((prev) => ({ ...prev, age: String(calculated) }));
+                          }
+                        }}
+                      />
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>Gender</Text>
+                      <View style={styles.optionWrap}>
+                        {GENDER_OPTIONS.map((option) => {
+                          const selected = editForm.gender.toLowerCase() === option.toLowerCase();
+                          return (
                             <TouchableOpacity
-                              key={prof}
+                              key={option}
+                              style={[styles.optionChip, selected && styles.optionChipSelected]}
+                              onPress={() => setEditForm({ ...editForm, gender: option })}
+                              activeOpacity={0.75}
+                            >
+                              <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>{option}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>Profession</Text>
+
+                      <View style={styles.categoryWrap}>
+                        {CATEGORIES.map((cat) => (
+                          <TouchableOpacity
+                            key={cat.id}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              setEditForm((prev) => ({
+                                ...prev,
+                                selectedCategory: cat.id,
+                                profession: 'none',
+                                customProfession: '',
+                              }));
+                            }}
+                            style={[styles.categoryChip, editForm.selectedCategory === cat.id && styles.optionChipSelected]}
+                          >
+                            <View style={styles.categoryChipInner}>
+                              <cat.icon size={16} color={cat.color} />
+                              <Text style={[styles.categoryChipText, editForm.selectedCategory === cat.id && styles.optionChipTextSelected]}>{cat.label}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      {editForm.selectedCategory && SUB_PROFESSIONS[editForm.selectedCategory] && (
+                        <View style={styles.inlineBlockSpacing}>
+                          <Text style={styles.inlineBlockLabel}>Select Expertise</Text>
+                          <View style={styles.optionWrap}>
+                            {SUB_PROFESSIONS[editForm.selectedCategory].map((prof) => (
+                              <TouchableOpacity
+                                key={prof}
+                                activeOpacity={0.7}
+                                onPress={() =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    profession: prof,
+                                    customProfession: '',
+                                  }))
+                                }
+                                style={[styles.optionChip, editForm.profession === prof && styles.optionChipSelected]}
+                              >
+                                <Text style={[styles.optionChipText, editForm.profession === prof && styles.optionChipTextSelected]}>{prof}</Text>
+                              </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
                               activeOpacity={0.7}
                               onPress={() =>
                                 setEditForm((prev) => ({
                                   ...prev,
-                                  profession: prof,
+                                  profession: 'other',
                                   customProfession: '',
                                 }))
                               }
-                              style={[styles.optionChip, editForm.profession === prof && styles.optionChipSelected]}
+                              style={[styles.optionChip, editForm.profession === 'other' && styles.optionChipSelected]}
                             >
-                              <Text style={[styles.optionChipText, editForm.profession === prof && styles.optionChipTextSelected]}>{prof}</Text>
+                              <Text style={[styles.optionChipText, editForm.profession === 'other' && styles.optionChipTextSelected]}>Other...</Text>
                             </TouchableOpacity>
-                          ))}
-                          <TouchableOpacity
-                            activeOpacity={0.7}
-                            onPress={() =>
+                          </View>
+                        </View>
+                      )}
+
+                      {(editForm.selectedCategory === 'other' || editForm.profession === 'other') && (
+                        <View style={styles.inlineBlockSpacing}>
+                          <Text style={styles.inlineBlockLabel}>Specify Profession</Text>
+                          <TextInput
+                            style={styles.formInput}
+                            placeholder="E.g. Full Stack Engineer, UX Specialist..."
+                            value={editForm.customProfession}
+                            onChangeText={(text) =>
                               setEditForm((prev) => ({
                                 ...prev,
-                                profession: 'other',
-                                customProfession: '',
+                                customProfession: text,
+                                profession: text ? 'other' : 'none',
                               }))
                             }
-                            style={[styles.optionChip, editForm.profession === 'other' && styles.optionChipSelected]}
-                          >
-                            <Text style={[styles.optionChipText, editForm.profession === 'other' && styles.optionChipTextSelected]}>Other...</Text>
-                          </TouchableOpacity>
+                          />
                         </View>
-                      </View>
-                    )}
-
-                    {(editForm.selectedCategory === 'other' || editForm.profession === 'other') && (
-                      <View style={styles.inlineBlockSpacing}>
-                        <Text style={styles.inlineBlockLabel}>Specify Profession</Text>
-                        <TextInput
-                          style={styles.formInput}
-                          placeholder="E.g. Full Stack Engineer, UX Specialist..."
-                          value={editForm.customProfession}
-                          onChangeText={(text) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              customProfession: text,
-                              profession: text ? 'other' : 'none',
-                            }))
-                          }
-                        />
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Skills</Text>
-                    <TextInput
-                      style={styles.formInput}
-                      placeholder="e.g. React Native, Figma, Java"
-                      value={editForm.skillsText}
-                      onChangeText={(text) => setEditForm({ ...editForm, skillsText: text })}
-                      placeholderTextColor={Colors.gray400}
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Bio</Text>
-                    <TextInput
-                      style={[styles.formInput, styles.bioInput]}
-                      placeholder="Tell us about yourself"
-                      value={editForm.bio}
-                      onChangeText={(text) => setEditForm({ ...editForm, bio: text })}
-                      placeholderTextColor={Colors.gray400}
-                      multiline
-                      numberOfLines={4}
-                    />
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>I am here to...</Text>
-                    <View style={styles.optionWrap}>
-                      {[
-                        { value: 'OFFER_SERVICE', label: 'Offer services' },
-                        { value: 'HIRE_PROFESSIONALS', label: 'Hire professionals' },
-                      ].map((option) => {
-                        const selected = editForm.userGoal === option.value;
-                        return (
-                          <TouchableOpacity
-                            key={option.value}
-                            style={[styles.optionChip, selected && styles.optionChipSelected]}
-                            onPress={() => setEditForm((prev) => ({ ...prev, userGoal: option.value }))}
-                            activeOpacity={0.75}
-                          >
-                            <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>{option.label}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  <View style={styles.formGroup}>
-                    <View style={styles.sectionHeaderRow}>
-                      <Text style={styles.formLabel}>Social Links</Text>
-                      <TouchableOpacity onPress={addSocialLink} activeOpacity={0.75}>
-                        <Text style={styles.inlineActionText}>+ Add</Text>
-                      </TouchableOpacity>
+                      )}
                     </View>
 
-                    {editForm.socialLinks.length === 0 && (
-                      <Text style={styles.helperText}>Add your Facebook, LinkedIn, Instagram, GitHub, website, or other public link.</Text>
-                    )}
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>Skills</Text>
+                      <TextInput
+                        style={styles.formInput}
+                        placeholder="e.g. React Native, Figma, Java"
+                        value={editForm.skillsText}
+                        onChangeText={(text) => setEditForm({ ...editForm, skillsText: text })}
+                        placeholderTextColor={Colors.gray400}
+                      />
+                    </View>
 
-                    {editForm.socialLinks.map((link, index) => (
-                      <View key={`${link.platform}-${index}`} style={styles.socialLinkEditor}>
-                        <View style={styles.optionWrap}>
-                          {SOCIAL_PLATFORM_OPTIONS.map((option) => {
-                            const selected = link.platform === option.value;
-                            return (
-                              <TouchableOpacity
-                                key={option.value}
-                                style={[styles.optionChip, styles.platformChip, selected && styles.optionChipSelected]}
-                                onPress={() => updateSocialLink(index, 'platform', option.value)}
-                                activeOpacity={0.75}
-                              >
-                                <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>{option.label}</Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>Bio</Text>
+                      <TextInput
+                        style={[styles.formInput, styles.bioInput]}
+                        placeholder="Tell us about yourself"
+                        value={editForm.bio}
+                        onChangeText={(text) => setEditForm({ ...editForm, bio: text })}
+                        placeholderTextColor={Colors.gray400}
+                        multiline
+                        numberOfLines={4}
+                      />
+                    </View>
 
-                        <TextInput
-                          style={styles.formInput}
-                          placeholder="Paste profile URL"
-                          value={link.url}
-                          onChangeText={(text) => updateSocialLink(index, 'url', text)}
-                          placeholderTextColor={Colors.gray400}
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                        />
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>I am here to...</Text>
+                      <View style={styles.optionWrap}>
+                        {[
+                          { value: 'OFFER_SERVICE', label: 'Offer services' },
+                          { value: 'HIRE_PROFESSIONALS', label: 'Hire professionals' },
+                        ].map((option) => {
+                          const selected = editForm.userGoal === option.value;
+                          return (
+                            <TouchableOpacity
+                              key={option.value}
+                              style={[styles.optionChip, selected && styles.optionChipSelected]}
+                              onPress={() => setEditForm((prev) => ({ ...prev, userGoal: option.value }))}
+                              activeOpacity={0.75}
+                            >
+                              <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>{option.label}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
 
-                        <TouchableOpacity style={styles.removeSocialLinkButton} onPress={() => removeSocialLink(index)} activeOpacity={0.75}>
-                          <Text style={styles.removeSocialLinkText}>Remove link</Text>
+                  </View>
+                </ScrollView>
+
+                <View style={styles.editFooter}>
+                  <TouchableOpacity style={styles.editFooterCancelButton} onPress={handleCloseEditModal} disabled={editLoading} activeOpacity={0.8}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <Button title="Save" onPress={handleSaveProfile} loading={editLoading} style={styles.editFooterPrimaryButton} />
+                </View>
+
+                {/* Avatar Action Sheet */}
+                <Modal visible={showAvatarSheet} transparent animationType="none" onRequestClose={() => setShowAvatarSheet(false)}>
+                  <TouchableOpacity
+                    style={styles.actionSheetOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowAvatarSheet(false)}
+                  >
+                    <View style={styles.actionSheetContainer}>
+                      <View style={styles.actionSheetContent}>
+                        <TouchableOpacity
+                          style={styles.actionSheetOption}
+                          onPress={() => { setShowAvatarSheet(false); void handleTakeImage(); }}
+                          activeOpacity={0.7}
+                        >
+                          <CameraIcon size={20} color={Colors.gray800} />
+                          <Text style={styles.actionSheetOptionText}>Take Photo</Text>
+                        </TouchableOpacity>
+                        <View style={styles.actionSheetDivider} />
+                        <TouchableOpacity
+                          style={styles.actionSheetOption}
+                          onPress={() => { setShowAvatarSheet(false); void handlePickImage(); }}
+                          activeOpacity={0.7}
+                        >
+                          <LucideImage size={20} color={Colors.gray800} />
+                          <Text style={styles.actionSheetOptionText}>Choose from Gallery</Text>
+                        </TouchableOpacity>
+                        <View style={styles.actionSheetDivider} />
+                        <TouchableOpacity
+                          style={styles.actionSheetOption}
+                          onPress={() => { setShowAvatarSheet(false); handleDeleteAvatar(); }}
+                          activeOpacity={0.7}
+                        >
+                          <X size={20} color={Colors.error} />
+                          <Text style={[styles.actionSheetOptionText, { color: Colors.error }]}>Remove Current Photo</Text>
+                        </TouchableOpacity>
+                        <View style={styles.actionSheetCancelDivider} />
+                        <TouchableOpacity
+                          style={styles.actionSheetCancelOption}
+                          onPress={() => setShowAvatarSheet(false)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.actionSheetCancelText}>Cancel</Text>
                         </TouchableOpacity>
                       </View>
-                    ))}
-                  </View>
-                </View>
-              </ScrollView>
+                    </View>
+                  </TouchableOpacity>
+                </Modal>
 
-              <View style={styles.editFooter}>
-                <TouchableOpacity style={styles.editFooterCancelButton} onPress={handleCloseEditModal} disabled={editLoading} activeOpacity={0.8}>
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <Button title="Save" onPress={handleSaveProfile} loading={editLoading} style={styles.editFooterPrimaryButton} />
-              </View>
-
-          {/* Avatar Action Sheet */}
-          <Modal visible={showAvatarSheet} transparent animationType="none" onRequestClose={() => setShowAvatarSheet(false)}>
-            <TouchableOpacity
-              style={styles.actionSheetOverlay}
-              activeOpacity={1}
-              onPress={() => setShowAvatarSheet(false)}
-            >
-              <View style={styles.actionSheetContainer}>
-                <View style={styles.actionSheetContent}>
+                {/* Cover Action Sheet */}
+                <Modal visible={showCoverSheet} transparent animationType="none" onRequestClose={() => setShowCoverSheet(false)}>
                   <TouchableOpacity
-                    style={styles.actionSheetOption}
-                    onPress={() => { setShowAvatarSheet(false); void handleTakeImage(); }}
-                    activeOpacity={0.7}
-                  >
-                    <CameraIcon size={20} color={Colors.gray800} />
-                    <Text style={styles.actionSheetOptionText}>Take Photo</Text>
-                  </TouchableOpacity>
-                  <View style={styles.actionSheetDivider} />
-                  <TouchableOpacity
-                    style={styles.actionSheetOption}
-                    onPress={() => { setShowAvatarSheet(false); void handlePickImage(); }}
-                    activeOpacity={0.7}
-                  >
-                    <LucideImage size={20} color={Colors.gray800} />
-                    <Text style={styles.actionSheetOptionText}>Choose from Gallery</Text>
-                  </TouchableOpacity>
-                  <View style={styles.actionSheetDivider} />
-                  <TouchableOpacity
-                    style={styles.actionSheetOption}
-                    onPress={() => { setShowAvatarSheet(false); handleDeleteAvatar(); }}
-                    activeOpacity={0.7}
-                  >
-                    <X size={20} color={Colors.error} />
-                    <Text style={[styles.actionSheetOptionText, { color: Colors.error }]}>Remove Current Photo</Text>
-                  </TouchableOpacity>
-                  <View style={styles.actionSheetCancelDivider} />
-                  <TouchableOpacity
-                    style={styles.actionSheetCancelOption}
-                    onPress={() => setShowAvatarSheet(false)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.actionSheetCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableOpacity>
-          </Modal>
-
-          {/* Cover Action Sheet */}
-          <Modal visible={showCoverSheet} transparent animationType="none" onRequestClose={() => setShowCoverSheet(false)}>
-            <TouchableOpacity
-              style={styles.actionSheetOverlay}
-              activeOpacity={1}
-              onPress={() => setShowCoverSheet(false)}
-            >
-              <View style={styles.actionSheetContainer}>
-                <View style={styles.actionSheetContent}>
-                  <TouchableOpacity
-                    style={styles.actionSheetOption}
-                    onPress={() => { setShowCoverSheet(false); void handleTakeCoverPhoto(); }}
-                    activeOpacity={0.7}
-                  >
-                    <CameraIcon size={20} color={Colors.gray800} />
-                    <Text style={styles.actionSheetOptionText}>Take Photo</Text>
-                  </TouchableOpacity>
-                  <View style={styles.actionSheetDivider} />
-                  <TouchableOpacity
-                    style={styles.actionSheetOption}
-                    onPress={() => { setShowCoverSheet(false); void handlePickCoverPhoto(); }}
-                    activeOpacity={0.7}
-                  >
-                    <LucideImage size={20} color={Colors.gray800} />
-                    <Text style={styles.actionSheetOptionText}>Choose from Gallery</Text>
-                  </TouchableOpacity>
-                  <View style={styles.actionSheetDivider} />
-                  <TouchableOpacity
-                    style={styles.actionSheetOption}
-                    onPress={() => { setShowCoverSheet(false); void handleDeleteCoverPhoto(); }}
-                    activeOpacity={0.7}
-                  >
-                    <X size={20} color={Colors.error} />
-                    <Text style={[styles.actionSheetOptionText, { color: Colors.error }]}>Remove Cover Photo</Text>
-                  </TouchableOpacity>
-                  <View style={styles.actionSheetCancelDivider} />
-                  <TouchableOpacity
-                    style={styles.actionSheetCancelOption}
+                    style={styles.actionSheetOverlay}
+                    activeOpacity={1}
                     onPress={() => setShowCoverSheet(false)}
-                    activeOpacity={0.7}
                   >
-                    <Text style={styles.actionSheetCancelText}>Cancel</Text>
+                    <View style={styles.actionSheetContainer}>
+                      <View style={styles.actionSheetContent}>
+                        <TouchableOpacity
+                          style={styles.actionSheetOption}
+                          onPress={() => { setShowCoverSheet(false); void handleTakeCoverPhoto(); }}
+                          activeOpacity={0.7}
+                        >
+                          <CameraIcon size={20} color={Colors.gray800} />
+                          <Text style={styles.actionSheetOptionText}>Take Photo</Text>
+                        </TouchableOpacity>
+                        <View style={styles.actionSheetDivider} />
+                        <TouchableOpacity
+                          style={styles.actionSheetOption}
+                          onPress={() => { setShowCoverSheet(false); void handlePickCoverPhoto(); }}
+                          activeOpacity={0.7}
+                        >
+                          <LucideImage size={20} color={Colors.gray800} />
+                          <Text style={styles.actionSheetOptionText}>Choose from Gallery</Text>
+                        </TouchableOpacity>
+                        <View style={styles.actionSheetDivider} />
+                        <TouchableOpacity
+                          style={styles.actionSheetOption}
+                          onPress={() => { setShowCoverSheet(false); void handleDeleteCoverPhoto(); }}
+                          activeOpacity={0.7}
+                        >
+                          <X size={20} color={Colors.error} />
+                          <Text style={[styles.actionSheetOptionText, { color: Colors.error }]}>Remove Cover Photo</Text>
+                        </TouchableOpacity>
+                        <View style={styles.actionSheetCancelDivider} />
+                        <TouchableOpacity
+                          style={styles.actionSheetCancelOption}
+                          onPress={() => setShowCoverSheet(false)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.actionSheetCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableOpacity>
-          </Modal>
+                </Modal>
 
+              </View>
+            </KeyboardAvoidingView>
           </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+        </Modal>
 
-      <Modal visible={showPostModal} transparent animationType="slide" onRequestClose={handleClosePostModal}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingPostId ? 'Edit Post' : 'Create Post'}</Text>
-              <TouchableOpacity onPress={handleClosePostModal} activeOpacity={0.7}>
-                <X size={24} color={Colors.gray800} />
-              </TouchableOpacity>
-            </View>
-
-            {postError && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorBoxText}>{postError}</Text>
+        <Modal visible={showPostModal} transparent animationType="slide" onRequestClose={handleClosePostModal}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{editingPostId ? 'Edit Post' : 'Create Post'}</Text>
+                <TouchableOpacity onPress={handleClosePostModal} activeOpacity={0.7}>
+                  <X size={24} color={Colors.gray800} />
+                </TouchableOpacity>
               </View>
-            )}
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Caption</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="Describe this work or achievement"
-                value={postForm.caption}
-                onChangeText={(text) => setPostForm((prev) => ({ ...prev, caption: text }))}
-                placeholderTextColor={Colors.gray400}
-              />
-            </View>
+              {postError && (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorBoxText}>{postError}</Text>
+                </View>
+              )}
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Media</Text>
-              {postForm.mediaItems.length > 0 ? (
-                postForm.mediaItems[0].mimeType.startsWith('video/') ? (
-                  <View style={styles.postModalVideoPreview}>
-                    <VideoIcon size={22} color={Colors.white} />
-                    <Text style={styles.postVideoText}>
-                      {postForm.mediaItems.length === 1 ? 'Video selected' : `${postForm.mediaItems.length} media selected`}
-                    </Text>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Caption</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Describe this work or achievement"
+                  value={postForm.caption}
+                  onChangeText={(text) => setPostForm((prev) => ({ ...prev, caption: text }))}
+                  placeholderTextColor={Colors.gray400}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Media</Text>
+                {postForm.mediaItems.length > 0 ? (
+                  postForm.mediaItems[0].mimeType.startsWith('video/') ? (
+                    <View style={styles.postModalVideoPreview}>
+                      <VideoIcon size={22} color={Colors.white} />
+                      <Text style={styles.postVideoText}>
+                        {postForm.mediaItems.length === 1 ? 'Video selected' : `${postForm.mediaItems.length} media selected`}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Image source={{ uri: postForm.mediaItems[0].uri }} style={styles.postModalImagePreview} />
+                  )
+                ) : (
+                  <Text style={styles.postsEmptyText}>No media selected</Text>
+                )}
+                {!editingPostId ? (
+                  <View style={styles.postModalButtons}>
+                    <Button title="Choose Photo/Video(s)" onPress={handlePickPostMedia} />
                   </View>
                 ) : (
-                  <Image source={{ uri: postForm.mediaItems[0].uri }} style={styles.postModalImagePreview} />
-                )
-              ) : (
-                <Text style={styles.postsEmptyText}>No media selected</Text>
-              )}
-              {!editingPostId ? (
-                <View style={styles.postModalButtons}>
-                  <Button title="Choose Photo/Video(s)" onPress={handlePickPostMedia} />
-                </View>
-              ) : (
-                <Text style={styles.editPostHint}>Media replacement is not enabled yet. You can update caption.</Text>
-              )}
-            </View>
+                  <Text style={styles.editPostHint}>Media replacement is not enabled yet. You can update caption.</Text>
+                )}
+              </View>
 
-            <View style={styles.formActions}>
-              <TouchableOpacity
-                style={[styles.formButton, styles.cancelButton]}
-                onPress={handleClosePostModal}
-                disabled={postUploading}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <Button
-                title={editingPostId ? 'Save Changes' : 'Upload Post'}
-                onPress={handleUploadPost}
-                loading={postUploading}
-              />
+              <View style={styles.formActions}>
+                <TouchableOpacity
+                  style={[styles.formButton, styles.cancelButton]}
+                  onPress={handleClosePostModal}
+                  disabled={postUploading}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <Button
+                  title={editingPostId ? 'Save Changes' : 'Upload Post'}
+                  onPress={handleUploadPost}
+                  loading={postUploading}
+                />
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      <Modal visible={showVerificationModal} transparent animationType="fade" onRequestClose={() => setShowVerificationModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.infoModalContent, styles.dashboardModalContent]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Verification</Text>
-              <TouchableOpacity onPress={() => setShowVerificationModal(false)} activeOpacity={0.7}>
-                <X size={24} color={Colors.gray800} />
-              </TouchableOpacity>
-            </View>
+        <Modal visible={showVerificationModal} transparent animationType="fade" onRequestClose={() => setShowVerificationModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.infoModalContent, styles.dashboardModalContent]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Verification</Text>
+                <TouchableOpacity onPress={() => setShowVerificationModal(false)} activeOpacity={0.7}>
+                  <X size={24} color={Colors.gray800} />
+                </TouchableOpacity>
+              </View>
 
-            <Text style={styles.dashboardIntro}>
-              Track email, phone, and identity status separately. Each step stays visible while your verification review moves forward.
-            </Text>
+              <Text style={styles.dashboardIntro}>
+                Track email, phone, and identity status separately. Each step stays visible while your verification review moves forward.
+              </Text>
 
-            <View style={styles.verificationTimeline}>
-              {verificationTasks.map((task, index) => {
-                const TaskIcon = task.icon;
-                const isVerified = task.state === 'verified';
-                const isPending = task.state === 'pending';
-                const isRejected = task.state === 'rejected';
+              <View style={styles.verificationTimeline}>
+                {verificationTasks.map((task, index) => {
+                  const TaskIcon = task.icon;
+                  const isVerified = task.state === 'verified';
+                  const isPending = task.state === 'pending';
+                  const isRejected = task.state === 'rejected';
 
-                return (
-                  <View key={task.key} style={styles.verificationStepRow}>
-                    <View style={[styles.verificationStepRail, task.isLast && styles.verificationStepRailHidden]} />
-                    <Animated.View
-                      style={[
-                        styles.verificationStepIcon,
-                        isVerified && styles.verificationStepIconVerified,
-                        isPending && styles.verificationStepIconPending,
-                        isRejected && styles.verificationStepIconRejected,
-                        {
-                          transform: [{ scale: verificationPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }],
-                        },
-                      ]}
-                    >
-                      <TaskIcon size={18} color={isVerified ? Colors.white : isPending ? Colors.warning : isRejected ? Colors.error : Colors.primary} />
-                    </Animated.View>
+                  return (
+                    <View key={task.key} style={styles.verificationStepRow}>
+                      <View style={[styles.verificationStepRail, task.isLast && styles.verificationStepRailHidden]} />
+                      <Animated.View
+                        style={[
+                          styles.verificationStepIcon,
+                          isVerified && styles.verificationStepIconVerified,
+                          isPending && styles.verificationStepIconPending,
+                          isRejected && styles.verificationStepIconRejected,
+                          {
+                            transform: [{ scale: verificationPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }],
+                          },
+                        ]}
+                      >
+                        <TaskIcon size={18} color={isVerified ? Colors.white : isPending ? Colors.warning : isRejected ? Colors.error : Colors.primary} />
+                      </Animated.View>
 
-                    <View style={styles.verificationStepBody}>
-                      <View style={styles.verificationStepHeader}>
-                        <Text style={styles.verificationStepTitle}>{task.label}</Text>
-                        <View
-                          style={[
-                            styles.verificationStatusPill,
-                            isVerified && styles.verificationStatusPillVerified,
-                            isPending && styles.verificationStatusPillPending,
-                            isRejected && styles.verificationStatusPillRejected,
-                            !isVerified && !isPending && !isRejected && styles.verificationStatusPillNeutral,
-                          ]}
-                        >
-                          <Text
+                      <View style={styles.verificationStepBody}>
+                        <View style={styles.verificationStepHeader}>
+                          <Text style={styles.verificationStepTitle}>{task.label}</Text>
+                          <View
                             style={[
-                              styles.verificationStatusPillText,
-                              isVerified && styles.verificationStatusPillTextVerified,
-                              isPending && styles.verificationStatusPillTextPending,
-                              isRejected && styles.verificationStatusPillTextRejected,
+                              styles.verificationStatusPill,
+                              isVerified && styles.verificationStatusPillVerified,
+                              isPending && styles.verificationStatusPillPending,
+                              isRejected && styles.verificationStatusPillRejected,
+                              !isVerified && !isPending && !isRejected && styles.verificationStatusPillNeutral,
                             ]}
                           >
-                            {isVerified ? 'Verified' : isPending ? 'Pending' : isRejected ? 'Rejected' : 'Not verified'}
+                            <Text
+                              style={[
+                                styles.verificationStatusPillText,
+                                isVerified && styles.verificationStatusPillTextVerified,
+                                isPending && styles.verificationStatusPillTextPending,
+                                isRejected && styles.verificationStatusPillTextRejected,
+                              ]}
+                            >
+                              {isVerified ? 'Verified' : isPending ? 'Pending' : isRejected ? 'Rejected' : 'Not verified'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.verificationStepHelper}>{task.helper}</Text>
+                        <Text style={styles.verificationStepMeta}>{task.timestampLabel}</Text>
+
+                        <View style={styles.verificationStepActions}>
+                          {isPending ? (
+                            <View style={styles.verificationDisabledPill}>
+                              <Clock3 size={14} color={Colors.gray600} />
+                              <Text style={styles.verificationDisabledPillText}>Under review</Text>
+                            </View>
+                          ) : isVerified ? (
+                            <View style={styles.verificationSuccessPill}>
+                              <BadgeCheck size={14} color={Colors.white} />
+                              <Text style={styles.verificationSuccessPillText}>Completed</Text>
+                            </View>
+                          ) : (
+                            <Button title={task.actionLabel} onPress={handleRequestVerification} loading={verificationBusy} />
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity style={styles.verificationUploadCard} onPress={handlePickVerificationDocument} activeOpacity={0.85}>
+                <UploadCloud size={24} color={Colors.primary} />
+                <Text style={styles.verificationUploadTitle}>Drop or tap to upload documents</Text>
+                <Text style={styles.verificationUploadText}>Images and PDFs appear here before you submit the flow.</Text>
+              </TouchableOpacity>
+
+              {verificationDocs.length > 0 && (
+                <View style={styles.verificationDocsGrid}>
+                  {verificationDocs.map((doc) => (
+                    <View key={`${doc.uri}-${doc.name}`} style={styles.verificationDocChip}>
+                      <View style={styles.verificationDocIconWrap}>
+                        {doc.mimeType?.includes('pdf') ? <FileText size={14} color={Colors.primary} /> : <LucideImage size={14} color={Colors.primary} />}
+                      </View>
+                      <Text style={styles.verificationDocText} numberOfLines={1}>
+                        {doc.name}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <View style={styles.infoModalCard}>
+                <Text style={styles.infoModalCardLabel}>Fee</Text>
+                <Text style={styles.infoModalCardValue}>₹{verificationFee || 299}</Text>
+              </View>
+
+              {verificationStatus === 'rejected' && (
+                <Text style={styles.verificationRetryCopy}>
+                  Your previous request was rejected. Replace the files above and retry the workflow.
+                </Text>
+              )}
+
+              {!!verificationRequestedAt && (
+                <Text style={styles.infoModalMeta}>
+                  Requested on {new Date(verificationRequestedAt).toLocaleDateString()}
+                </Text>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={showBadgesModal} transparent animationType="fade" onRequestClose={() => setShowBadgesModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.infoModalContent, styles.dashboardModalContent]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Badges & Achievements</Text>
+                <TouchableOpacity onPress={() => setShowBadgesModal(false)} activeOpacity={0.7}>
+                  <X size={24} color={Colors.gray800} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.dashboardIntro}>
+                Earn badges as your profile activity grows. Locked milestones stay muted until you unlock them.
+              </Text>
+
+              <View style={styles.badgesGrid}>
+                {badgeMilestones.map((badge) => {
+                  const isSelected = selectedBadgeId === badge.id;
+                  return (
+                    <TouchableOpacity
+                      key={badge.id}
+                      style={[
+                        styles.badgeCard,
+                        badge.active ? styles.badgeCardActive : styles.badgeCardInactive,
+                        !badge.active && Platform.OS === 'web' ? ({ filter: 'grayscale(100%)' } as any) : null,
+                      ]}
+                      onPress={() => setSelectedBadgeId((current) => (current === badge.id ? null : badge.id))}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.badgeCardTopRow}>
+                        <View style={[styles.badgeIconWrap, { backgroundColor: `${badge.color}20` }]}>
+                          <Award size={18} color={badge.color} />
+                        </View>
+                        <View style={[styles.badgeStatePill, badge.active ? styles.badgeStatePillEarned : styles.badgeStatePillLocked]}>
+                          <Text style={[styles.badgeStatePillText, badge.active ? styles.badgeStatePillTextEarned : styles.badgeStatePillTextLocked]}>
+                            {badge.active ? 'Earned' : 'Locked'}
                           </Text>
                         </View>
                       </View>
-                      <Text style={styles.verificationStepHelper}>{task.helper}</Text>
-                      <Text style={styles.verificationStepMeta}>{task.timestampLabel}</Text>
 
-                      <View style={styles.verificationStepActions}>
-                        {isPending ? (
-                          <View style={styles.verificationDisabledPill}>
-                            <Clock3 size={14} color={Colors.gray600} />
-                            <Text style={styles.verificationDisabledPillText}>Under review</Text>
-                          </View>
-                        ) : isVerified ? (
-                          <View style={styles.verificationSuccessPill}>
-                            <BadgeCheck size={14} color={Colors.white} />
-                            <Text style={styles.verificationSuccessPillText}>Completed</Text>
-                          </View>
-                        ) : (
-                          <Button title={task.actionLabel} onPress={handleRequestVerification} loading={verificationBusy} />
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
+                      <Text style={styles.badgeTitle}>{badge.title}</Text>
+                      <Text style={styles.badgeDescription}>{badge.description}</Text>
+                      <Text style={styles.badgeRarity}>{badge.rarity}</Text>
 
-            <TouchableOpacity style={styles.verificationUploadCard} onPress={handlePickVerificationDocument} activeOpacity={0.85}>
-              <UploadCloud size={24} color={Colors.primary} />
-              <Text style={styles.verificationUploadTitle}>Drop or tap to upload documents</Text>
-              <Text style={styles.verificationUploadText}>Images and PDFs appear here before you submit the flow.</Text>
-            </TouchableOpacity>
-
-            {verificationDocs.length > 0 && (
-              <View style={styles.verificationDocsGrid}>
-                {verificationDocs.map((doc) => (
-                  <View key={`${doc.uri}-${doc.name}`} style={styles.verificationDocChip}>
-                    <View style={styles.verificationDocIconWrap}>
-                      {doc.mimeType?.includes('pdf') ? <FileText size={14} color={Colors.primary} /> : <LucideImage size={14} color={Colors.primary} />}
-                    </View>
-                    <Text style={styles.verificationDocText} numberOfLines={1}>
-                      {doc.name}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            <View style={styles.infoModalCard}>
-              <Text style={styles.infoModalCardLabel}>Fee</Text>
-              <Text style={styles.infoModalCardValue}>₹{verificationFee || 299}</Text>
-            </View>
-
-            {verificationStatus === 'rejected' && (
-              <Text style={styles.verificationRetryCopy}>
-                Your previous request was rejected. Replace the files above and retry the workflow.
-              </Text>
-            )}
-
-            {!!verificationRequestedAt && (
-              <Text style={styles.infoModalMeta}>
-                Requested on {new Date(verificationRequestedAt).toLocaleDateString()}
-              </Text>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showBadgesModal} transparent animationType="fade" onRequestClose={() => setShowBadgesModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.infoModalContent, styles.dashboardModalContent]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Badges & Achievements</Text>
-              <TouchableOpacity onPress={() => setShowBadgesModal(false)} activeOpacity={0.7}>
-                <X size={24} color={Colors.gray800} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.dashboardIntro}>
-              Earn badges as your profile activity grows. Locked milestones stay muted until you unlock them.
-            </Text>
-
-            <View style={styles.badgesGrid}>
-              {badgeMilestones.map((badge) => {
-                const isSelected = selectedBadgeId === badge.id;
-                return (
-                  <TouchableOpacity
-                    key={badge.id}
-                    style={[
-                      styles.badgeCard,
-                      badge.active ? styles.badgeCardActive : styles.badgeCardInactive,
-                      !badge.active && Platform.OS === 'web' ? ({ filter: 'grayscale(100%)' } as any) : null,
-                    ]}
-                    onPress={() => setSelectedBadgeId((current) => (current === badge.id ? null : badge.id))}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.badgeCardTopRow}>
-                      <View style={[styles.badgeIconWrap, { backgroundColor: `${badge.color}20` }]}> 
-                        <Award size={18} color={badge.color} />
-                      </View>
-                      <View style={[styles.badgeStatePill, badge.active ? styles.badgeStatePillEarned : styles.badgeStatePillLocked]}>
-                        <Text style={[styles.badgeStatePillText, badge.active ? styles.badgeStatePillTextEarned : styles.badgeStatePillTextLocked]}>
-                          {badge.active ? 'Earned' : 'Locked'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.badgeTitle}>{badge.title}</Text>
-                    <Text style={styles.badgeDescription}>{badge.description}</Text>
-                    <Text style={styles.badgeRarity}>{badge.rarity}</Text>
-
-                    {!badge.active && (
-                      <View style={styles.badgeLockOverlay}>
-                        <Lock size={18} color={Colors.white} />
-                      </View>
-                    )}
-
-                    {isSelected && (
-                      <View style={styles.badgeTooltip}>
-                        <Text style={styles.badgeTooltipTitle}>{badge.title}</Text>
-                        <Text style={styles.badgeTooltipText}>{badge.description}</Text>
-                        <Text style={styles.badgeTooltipMeta}>Tier: {badge.rarity}</Text>
-                        <Text style={styles.badgeTooltipMeta}>{badge.unlockText}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showRatingsModal} transparent animationType="fade" onRequestClose={() => setShowRatingsModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.infoModalContent, styles.dashboardModalContent]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Reviews & Ratings</Text>
-              <TouchableOpacity onPress={() => setShowRatingsModal(false)} activeOpacity={0.7}>
-                <X size={24} color={Colors.gray800} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.dashboardIntro}>
-              An analytics-backed review ledger with sorting, filters, and a virtualized feed for faster browsing.
-            </Text>
-
-            <View style={styles.ratingSummaryCard}>
-              <Text style={styles.ratingSummaryValue}>{averageRating.toFixed(1)}</Text>
-              <View style={styles.ratingStarsRow}>
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Star
-                    key={index}
-                    size={14}
-                    color={index < Math.round(averageRating) ? '#F59E0B' : Colors.gray300}
-                    fill={index < Math.round(averageRating) ? '#F59E0B' : 'transparent'}
-                  />
-                ))}
-              </View>
-              <Text style={styles.ratingSummaryMeta}>{ratingsSummary.totalRatings || 0} reviews</Text>
-            </View>
-
-            <View style={styles.ratingAnalyticsGrid}>
-              <View style={styles.ratingDistributionCard}>
-                {ratingDistribution.map((row) => (
-                  <View key={row.star} style={styles.ratingDistributionRow}>
-                    <Text style={styles.ratingDistributionLabel}>{row.star}★</Text>
-                    <View style={styles.ratingDistributionBarTrack}>
-                      <View style={[styles.ratingDistributionBarFill, { width: `${row.percentage}%` }]} />
-                    </View>
-                    <Text style={styles.ratingDistributionValue}>{row.percentage}%</Text>
-                  </View>
-                ))}
-              </View>
-
-              <View style={styles.reviewControlsRow}>
-                <TouchableOpacity
-                  style={[styles.reviewControlChip, reviewSortMode === 'recent' && styles.reviewControlChipActive]}
-                  onPress={() => setReviewSortMode('recent')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.reviewControlChipText, reviewSortMode === 'recent' && styles.reviewControlChipTextActive]}>Most Recent</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.reviewControlChip, reviewSortMode === 'highest' && styles.reviewControlChipActive]}
-                  onPress={() => setReviewSortMode('highest')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.reviewControlChipText, reviewSortMode === 'highest' && styles.reviewControlChipTextActive]}>Highest Rated</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.reviewControlChip, reviewFilterMode === 'verified' && styles.reviewControlChipActive]}
-                  onPress={() => setReviewFilterMode((current) => (current === 'all' ? 'verified' : 'all'))}
-                  activeOpacity={0.8}
-                >
-                  <SlidersHorizontal size={14} color={reviewFilterMode === 'verified' ? Colors.primary : Colors.gray600} />
-                  <Text style={[styles.reviewControlChipText, reviewFilterMode === 'verified' && styles.reviewControlChipTextActive]}>Verified Only</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.rateProfileButton, !canRateUser && styles.rateProfileButtonDisabled]}
-              onPress={() => setShowRatingModal(true)}
-              activeOpacity={0.8}
-              disabled={!canRateUser}
-            >
-              <Star size={16} color={Colors.white} fill={Colors.white} />
-              <Text style={styles.rateProfileButtonText}>{canRateUser ? 'Rate this profile' : (ratingEligibilityReason || 'Not eligible to rate')}</Text>
-            </TouchableOpacity>
-
-            {insightsLoading ? (
-              <View style={styles.reviewSkeletonList}>
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <View key={index} style={styles.reviewSkeletonRow}>
-                    <View style={styles.reviewSkeletonAvatar} />
-                    <View style={styles.reviewSkeletonBody}>
-                      <View style={styles.reviewSkeletonLineShort} />
-                      <View style={styles.reviewSkeletonLineLong} />
-                      <View style={styles.reviewSkeletonLineLonger} />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            ) : sortedRatings.length > 0 ? (
-              <FlatList
-                data={sortedRatings}
-                keyExtractor={(item) => item.id}
-                style={styles.reviewFeed}
-                contentContainerStyle={styles.reviewFeedContent}
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled
-                ListHeaderComponent={
-                  showAllRatings ? null : (
-                    <Text style={styles.reviewFeedHeader}>Showing the most relevant reviews first. Toggle the filters above to refine the feed.</Text>
-                  )
-                }
-                renderItem={({ item }) => (
-                  <View style={styles.ratingItem}>
-                    {getImageSource(item.reviewer.avatar) ? (
-                      <Image source={getImageSource(item.reviewer.avatar)!} style={styles.ratingAvatar} />
-                    ) : (
-                      <View style={[styles.ratingAvatar, { backgroundColor: Colors.gray200, justifyContent: 'center', alignItems: 'center' }]}>
-                        <UserCircle size={18} color={Colors.gray500} />
-                      </View>
-                    )}
-                    <View style={styles.ratingContent}>
-                      <View style={styles.ratingMetaRow}>
-                        <Text style={styles.ratingName}>{item.reviewer.fullName || item.reviewer.username}</Text>
-                        <Text style={styles.ratingTimeText}>{getRelativeTime(item.createdAt)}</Text>
-                      </View>
-                      <View style={styles.ratingStarsRow}>
-                        {Array.from({ length: 5 }).map((_, index) => (
-                          <Star
-                            key={index}
-                            size={12}
-                            color={index < item.rating ? '#F59E0B' : Colors.gray300}
-                            fill={index < item.rating ? '#F59E0B' : 'transparent'}
-                          />
-                        ))}
-                        <View style={styles.verifiedReviewPill}>
-                          <BadgeCheck size={11} color={Colors.primary} />
-                          <Text style={styles.verifiedReviewPillText}>Verified Review</Text>
+                      {!badge.active && (
+                        <View style={styles.badgeLockOverlay}>
+                          <Lock size={18} color={Colors.white} />
                         </View>
-                      </View>
-                      <Text style={styles.ratingScoreText}>{item.rating.toFixed(1)} / 5</Text>
-                      {!!item.comment ? (
-                        <Text style={styles.ratingComment}>{item.comment}</Text>
-                      ) : (
-                        <Text style={styles.ratingCommentMuted}>No written feedback was left for this review.</Text>
                       )}
-                    </View>
-                  </View>
-                )}
-                ListEmptyComponent={
-                  <View style={styles.emptyReviewState}>
-                    <Sparkles size={24} color={Colors.primary} />
-                    <Text style={styles.emptyReviewTitle}>No reviews yet</Text>
-                    <Text style={styles.emptyReviewCopy}>When reviews arrive, they will appear here with timestamps, star detail, and verification context.</Text>
-                  </View>
-                }
-              />
-            ) : (
-              <View style={styles.emptyReviewState}>
-                <Sparkles size={24} color={Colors.primary} />
-                <Text style={styles.emptyReviewTitle}>No matching reviews</Text>
-                <Text style={styles.emptyReviewCopy}>Try switching the sort or filter controls to widen the ledger.</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
 
-      <Modal visible={showRatingModal} transparent animationType="fade" onRequestClose={() => setShowRatingModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.infoModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Rate Profile</Text>
-              <TouchableOpacity onPress={() => setShowRatingModal(false)} activeOpacity={0.7}>
-                <X size={24} color={Colors.gray800} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.infoModalText}>
-              Share a quick review for {profile.fullName}.
-            </Text>
-
-            <View style={styles.ratingPickerWrap}>
-              <View style={styles.ratingPickerRow}>
-                {Array.from({ length: 5 }).map((_, index) => {
-                  const value = index + 1;
-                  const active = value <= ratingValue;
-                  return (
-                    <TouchableOpacity
-                      key={value}
-                      onPress={() => setRatingValue(value)}
-                      activeOpacity={0.85}
-                      style={styles.ratingPickButton}
-                    >
-                      <Star size={22} color={active ? '#F59E0B' : Colors.gray300} fill={active ? '#F59E0B' : 'transparent'} />
+                      {isSelected && (
+                        <View style={styles.badgeTooltip}>
+                          <Text style={styles.badgeTooltipTitle}>{badge.title}</Text>
+                          <Text style={styles.badgeTooltipText}>{badge.description}</Text>
+                          <Text style={styles.badgeTooltipMeta}>Tier: {badge.rarity}</Text>
+                          <Text style={styles.badgeTooltipMeta}>{badge.unlockText}</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
               </View>
-              <Text style={styles.ratingPickerLabel}>{['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'][ratingValue]}</Text>
             </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Your review</Text>
-              <TextInput
-                style={[styles.formInput, styles.ratingCommentInput]}
-                placeholder="Share your experience..."
-                value={ratingComment}
-                onChangeText={setRatingComment}
-                placeholderTextColor={Colors.gray400}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-            </View>
-
-            <Button
-              title={ratingSubmitting ? 'Submitting...' : 'Submit rating'}
-              onPress={handleSubmitRating}
-              loading={ratingSubmitting}
-            />
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      {/* Post Action Sheet */}
-      <Modal visible={showPostActionSheet} transparent animationType="none" onRequestClose={() => setShowPostActionSheet(false)}>
-        <TouchableOpacity
-          style={styles.actionSheetOverlay}
-          activeOpacity={1}
-          onPress={() => setShowPostActionSheet(false)}
-        >
-          <View style={styles.actionSheetContainer}>
-            <View style={styles.actionSheetContent}>
+        <Modal visible={showRatingsModal} transparent animationType="fade" onRequestClose={() => setShowRatingsModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.infoModalContent, styles.dashboardModalContent]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Reviews & Ratings</Text>
+                <TouchableOpacity onPress={() => setShowRatingsModal(false)} activeOpacity={0.7}>
+                  <X size={24} color={Colors.gray800} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.dashboardIntro}>
+                An analytics-backed review ledger with sorting, filters, and a virtualized feed for faster browsing.
+              </Text>
+
+              <View style={styles.ratingSummaryCard}>
+                <Text style={styles.ratingSummaryValue}>{averageRating.toFixed(1)}</Text>
+                <View style={styles.ratingStarsRow}>
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <Star
+                      key={index}
+                      size={14}
+                      color={index < Math.round(averageRating) ? '#F59E0B' : Colors.gray300}
+                      fill={index < Math.round(averageRating) ? '#F59E0B' : 'transparent'}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.ratingSummaryMeta}>{ratingsSummary.totalRatings || 0} reviews</Text>
+              </View>
+
+              <View style={styles.ratingAnalyticsGrid}>
+                <View style={styles.ratingDistributionCard}>
+                  {ratingDistribution.map((row) => (
+                    <View key={row.star} style={styles.ratingDistributionRow}>
+                      <Text style={styles.ratingDistributionLabel}>{row.star}★</Text>
+                      <View style={styles.ratingDistributionBarTrack}>
+                        <View style={[styles.ratingDistributionBarFill, { width: `${row.percentage}%` }]} />
+                      </View>
+                      <Text style={styles.ratingDistributionValue}>{row.percentage}%</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.reviewControlsRow}>
+                  <TouchableOpacity
+                    style={[styles.reviewControlChip, reviewSortMode === 'recent' && styles.reviewControlChipActive]}
+                    onPress={() => setReviewSortMode('recent')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.reviewControlChipText, reviewSortMode === 'recent' && styles.reviewControlChipTextActive]}>Most Recent</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.reviewControlChip, reviewSortMode === 'highest' && styles.reviewControlChipActive]}
+                    onPress={() => setReviewSortMode('highest')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.reviewControlChipText, reviewSortMode === 'highest' && styles.reviewControlChipTextActive]}>Highest Rated</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.reviewControlChip, reviewFilterMode === 'verified' && styles.reviewControlChipActive]}
+                    onPress={() => setReviewFilterMode((current) => (current === 'all' ? 'verified' : 'all'))}
+                    activeOpacity={0.8}
+                  >
+                    <SlidersHorizontal size={14} color={reviewFilterMode === 'verified' ? Colors.primary : Colors.gray600} />
+                    <Text style={[styles.reviewControlChipText, reviewFilterMode === 'verified' && styles.reviewControlChipTextActive]}>Verified Only</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               <TouchableOpacity
-                style={styles.actionSheetOption}
-                onPress={() => {
-                  setShowPostActionSheet(false);
-                  if (selectedPostForAction) handleOpenEditPostModal(selectedPostForAction);
-                }}
-                activeOpacity={0.7}
+                style={[styles.rateProfileButton, !canRateUser && styles.rateProfileButtonDisabled]}
+                onPress={() => setShowRatingModal(true)}
+                activeOpacity={0.8}
+                disabled={!canRateUser}
               >
-                <Edit3 size={20} color={Colors.gray800} />
-                <Text style={styles.actionSheetOptionText}>Edit Post</Text>
+                <Star size={16} color={Colors.white} fill={Colors.white} />
+                <Text style={styles.rateProfileButtonText}>{canRateUser ? 'Rate this profile' : (ratingEligibilityReason || 'Not eligible to rate')}</Text>
               </TouchableOpacity>
-              <View style={styles.actionSheetDivider} />
-              <TouchableOpacity
-                style={styles.actionSheetOption}
-                onPress={() => {
-                  setShowPostActionSheet(false);
-                  if (selectedPostForAction) handleDeletePost(selectedPostForAction.id);
-                }}
-                activeOpacity={0.7}
-              >
-                <X size={20} color={Colors.error} />
-                <Text style={[styles.actionSheetOptionText, { color: Colors.error }]}>Delete Post</Text>
-              </TouchableOpacity>
-              <View style={styles.actionSheetDivider} />
-              <TouchableOpacity
-                style={styles.actionSheetOption}
-                onPress={() => {
-                  setShowPostActionSheet(false);
-                  if (selectedPostForAction) {
-                    Share.share({ message: selectedPostForAction.caption || 'Check out this post on Krovaa.' });
+
+              {insightsLoading ? (
+                <View style={styles.reviewSkeletonList}>
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <View key={index} style={styles.reviewSkeletonRow}>
+                      <View style={styles.reviewSkeletonAvatar} />
+                      <View style={styles.reviewSkeletonBody}>
+                        <View style={styles.reviewSkeletonLineShort} />
+                        <View style={styles.reviewSkeletonLineLong} />
+                        <View style={styles.reviewSkeletonLineLonger} />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : sortedRatings.length > 0 ? (
+                <FlatList
+                  data={sortedRatings}
+                  keyExtractor={(item) => item.id}
+                  style={styles.reviewFeed}
+                  contentContainerStyle={styles.reviewFeedContent}
+                  showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled
+                  ListHeaderComponent={
+                    showAllRatings ? null : (
+                      <Text style={styles.reviewFeedHeader}>Showing the most relevant reviews first. Toggle the filters above to refine the feed.</Text>
+                    )
                   }
-                }}
-                activeOpacity={0.7}
-              >
-                <Share2 size={20} color={Colors.gray800} />
-                <Text style={styles.actionSheetOptionText}>Share Post</Text>
-              </TouchableOpacity>
-              <View style={styles.actionSheetCancelDivider} />
-              <TouchableOpacity
-                style={styles.actionSheetCancelOption}
-                onPress={() => setShowPostActionSheet(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.actionSheetCancelText}>Cancel</Text>
-              </TouchableOpacity>
+                  renderItem={({ item }) => (
+                    <View style={styles.ratingItem}>
+                      {getImageSource(item.reviewer.avatar) ? (
+                        <Image source={getImageSource(item.reviewer.avatar)!} style={styles.ratingAvatar} />
+                      ) : (
+                        <View style={[styles.ratingAvatar, { backgroundColor: Colors.gray200, justifyContent: 'center', alignItems: 'center' }]}>
+                          <UserCircle size={18} color={Colors.gray500} />
+                        </View>
+                      )}
+                      <View style={styles.ratingContent}>
+                        <View style={styles.ratingMetaRow}>
+                          <Text style={styles.ratingName}>{item.reviewer.fullName || item.reviewer.username}</Text>
+                          <Text style={styles.ratingTimeText}>{getRelativeTime(item.createdAt)}</Text>
+                        </View>
+                        <View style={styles.ratingStarsRow}>
+                          {Array.from({ length: 5 }).map((_, index) => (
+                            <Star
+                              key={index}
+                              size={12}
+                              color={index < item.rating ? '#F59E0B' : Colors.gray300}
+                              fill={index < item.rating ? '#F59E0B' : 'transparent'}
+                            />
+                          ))}
+                          <View style={styles.verifiedReviewPill}>
+                            <BadgeCheck size={11} color={Colors.primary} />
+                            <Text style={styles.verifiedReviewPillText}>Verified Review</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.ratingScoreText}>{item.rating.toFixed(1)} / 5</Text>
+                        {!!item.comment ? (
+                          <Text style={styles.ratingComment}>{item.comment}</Text>
+                        ) : (
+                          <Text style={styles.ratingCommentMuted}>No written feedback was left for this review.</Text>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                  ListEmptyComponent={
+                    <View style={styles.emptyReviewState}>
+                      <Sparkles size={24} color={Colors.primary} />
+                      <Text style={styles.emptyReviewTitle}>No reviews yet</Text>
+                      <Text style={styles.emptyReviewCopy}>When reviews arrive, they will appear here with timestamps, star detail, and verification context.</Text>
+                    </View>
+                  }
+                />
+              ) : (
+                <View style={styles.emptyReviewState}>
+                  <Sparkles size={24} color={Colors.primary} />
+                  <Text style={styles.emptyReviewTitle}>No matching reviews</Text>
+                  <Text style={styles.emptyReviewCopy}>Try switching the sort or filter controls to widen the ledger.</Text>
+                </View>
+              )}
             </View>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        </Modal>
 
-      {/* Fullscreen Post Viewer */}
-      <Modal visible={showFullscreenViewer} transparent animationType="none" onRequestClose={() => setShowFullscreenViewer(false)}>
-        <View style={styles.fullscreenViewer}>
+        <Modal visible={showRatingModal} transparent animationType="fade" onRequestClose={() => setShowRatingModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.infoModalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Rate Profile</Text>
+                <TouchableOpacity onPress={() => setShowRatingModal(false)} activeOpacity={0.7}>
+                  <X size={24} color={Colors.gray800} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.infoModalText}>
+                Share a quick review for {profile.fullName}.
+              </Text>
+
+              <View style={styles.ratingPickerWrap}>
+                <View style={styles.ratingPickerRow}>
+                  {Array.from({ length: 5 }).map((_, index) => {
+                    const value = index + 1;
+                    const active = value <= ratingValue;
+                    return (
+                      <TouchableOpacity
+                        key={value}
+                        onPress={() => setRatingValue(value)}
+                        activeOpacity={0.85}
+                        style={styles.ratingPickButton}
+                      >
+                        <Star size={22} color={active ? '#F59E0B' : Colors.gray300} fill={active ? '#F59E0B' : 'transparent'} />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.ratingPickerLabel}>{['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'][ratingValue]}</Text>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Your review</Text>
+                <TextInput
+                  style={[styles.formInput, styles.ratingCommentInput]}
+                  placeholder="Share your experience..."
+                  value={ratingComment}
+                  onChangeText={setRatingComment}
+                  placeholderTextColor={Colors.gray400}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <Button
+                title={ratingSubmitting ? 'Submitting...' : 'Submit rating'}
+                onPress={handleSubmitRating}
+                loading={ratingSubmitting}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Post Action Sheet */}
+        <Modal visible={showPostActionSheet} transparent animationType="none" onRequestClose={() => setShowPostActionSheet(false)}>
           <TouchableOpacity
-            style={styles.fullscreenCloseButton}
-            onPress={() => setShowFullscreenViewer(false)}
-            activeOpacity={0.8}
+            style={styles.actionSheetOverlay}
+            activeOpacity={1}
+            onPress={() => setShowPostActionSheet(false)}
           >
-            <X size={24} color={Colors.white} />
+            <View style={styles.actionSheetContainer}>
+              <View style={styles.actionSheetContent}>
+                <TouchableOpacity
+                  style={styles.actionSheetOption}
+                  onPress={() => {
+                    setShowPostActionSheet(false);
+                    if (selectedPostForAction) handleOpenEditPostModal(selectedPostForAction);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Edit3 size={20} color={Colors.gray800} />
+                  <Text style={styles.actionSheetOptionText}>Edit Post</Text>
+                </TouchableOpacity>
+                <View style={styles.actionSheetDivider} />
+                <TouchableOpacity
+                  style={styles.actionSheetOption}
+                  onPress={() => {
+                    setShowPostActionSheet(false);
+                    if (selectedPostForAction) handleDeletePost(selectedPostForAction.id);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <X size={20} color={Colors.error} />
+                  <Text style={[styles.actionSheetOptionText, { color: Colors.error }]}>Delete Post</Text>
+                </TouchableOpacity>
+                <View style={styles.actionSheetDivider} />
+                <TouchableOpacity
+                  style={styles.actionSheetOption}
+                  onPress={() => {
+                    setShowPostActionSheet(false);
+                    if (selectedPostForAction) {
+                      Share.share({ message: selectedPostForAction.caption || 'Check out this post on Krovaa.' });
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Share2 size={20} color={Colors.gray800} />
+                  <Text style={styles.actionSheetOptionText}>Share Post</Text>
+                </TouchableOpacity>
+                <View style={styles.actionSheetCancelDivider} />
+                <TouchableOpacity
+                  style={styles.actionSheetCancelOption}
+                  onPress={() => setShowPostActionSheet(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.actionSheetCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </TouchableOpacity>
+        </Modal>
 
-          <View
-            style={styles.fullscreenContent}
-            {...(PanResponder.create({
-              onStartShouldSetPanResponder: () => true,
-              onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10,
-              onPanResponderRelease: (_, gs) => {
-                if (gs.dx > 80 && selectedPostIndex > 0) {
-                  setSelectedPostIndex((prev) => prev - 1);
-                } else if (gs.dx < -80 && selectedPostIndex < posts.length - 1) {
-                  setSelectedPostIndex((prev) => prev + 1);
-                } else if (Math.abs(gs.dy) > 100) {
-                  setShowFullscreenViewer(false);
-                }
-              },
-            }).panHandlers)}
-          >
-            {posts[selectedPostIndex]?.mediaType === 'image' ? (
-              <Image
-                source={{ uri: posts[selectedPostIndex]?.mediaUrl }}
-                style={styles.fullscreenMedia}
-                resizeMode="contain"
-              />
-            ) : (
-              <Video
-                source={{ uri: posts[selectedPostIndex]?.mediaUrl }}
-                style={styles.fullscreenMedia}
-                resizeMode={ResizeMode.CONTAIN}
-                useNativeControls
-                shouldPlay
-              />
-            )}
-          </View>
+        {/* Fullscreen Post Viewer */}
+        <Modal visible={showFullscreenViewer} transparent animationType="none" onRequestClose={() => setShowFullscreenViewer(false)}>
+          <View style={styles.fullscreenViewer}>
+            <TouchableOpacity
+              style={styles.fullscreenCloseButton}
+              onPress={() => setShowFullscreenViewer(false)}
+              activeOpacity={0.8}
+            >
+              <X size={24} color={Colors.white} />
+            </TouchableOpacity>
 
-          <View style={styles.fullscreenCaptionBar}>
-            <Text style={styles.fullscreenCaptionText} numberOfLines={2}>
-              {posts[selectedPostIndex]?.caption || ''}
-            </Text>
-            <Text style={styles.fullscreenCounterText}>
-              {selectedPostIndex + 1} / {posts.length}
-            </Text>
+            <View
+              style={styles.fullscreenContent}
+              {...(PanResponder.create({
+                onStartShouldSetPanResponder: () => true,
+                onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10,
+                onPanResponderRelease: (_, gs) => {
+                  if (gs.dx > 80 && selectedPostIndex > 0) {
+                    setSelectedPostIndex((prev) => prev - 1);
+                  } else if (gs.dx < -80 && selectedPostIndex < posts.length - 1) {
+                    setSelectedPostIndex((prev) => prev + 1);
+                  } else if (Math.abs(gs.dy) > 100) {
+                    setShowFullscreenViewer(false);
+                  }
+                },
+              }).panHandlers)}
+            >
+              {posts[selectedPostIndex]?.mediaType === 'image' ? (
+                <Image
+                  source={{ uri: posts[selectedPostIndex]?.mediaUrl }}
+                  style={styles.fullscreenMedia}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Video
+                  source={{ uri: posts[selectedPostIndex]?.mediaUrl }}
+                  style={styles.fullscreenMedia}
+                  resizeMode={ResizeMode.CONTAIN}
+                  useNativeControls
+                  shouldPlay
+                />
+              )}
+            </View>
+
+            <View style={styles.fullscreenCaptionBar}>
+              <Text style={styles.fullscreenCaptionText} numberOfLines={2}>
+                {posts[selectedPostIndex]?.caption || ''}
+              </Text>
+              <Text style={styles.fullscreenCounterText}>
+                {selectedPostIndex + 1} / {posts.length}
+              </Text>
+            </View>
           </View>
-        </View>
-      </Modal>
-    </Animated.View>
-  </ScrollView>
+        </Modal>
+      </Animated.View>
+    </ScrollView>
   );
 }
 
@@ -3013,6 +3259,13 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.bold as any,
     color: Colors.gray900,
     marginTop: Spacing.md,
+  },
+  username: {
+    fontSize: FontSizes.md,
+    color: Colors.gray500,
+    fontWeight: FontWeights.medium as any,
+    marginTop: 2,
+    marginBottom: 4,
   },
   locationRow: {
     flexDirection: 'row',
@@ -3438,7 +3691,7 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.xs,
     fontWeight: FontWeights.medium as any,
   },
-  
+
   // Modal styles
   modalOverlay: {
     flex: 1,
@@ -4705,5 +4958,174 @@ const styles = StyleSheet.create({
     color: Colors.gray600,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  calendarContainer: {
+    backgroundColor: Colors.white,
+    borderColor: Colors.gray200,
+    borderWidth: 1,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.sm,
+    marginTop: 4,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  calendarArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarSelectors: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    justifyContent: 'center',
+    flex: 1,
+  },
+  selectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.gray50,
+    borderColor: Colors.gray200,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  selectorText: {
+    fontSize: 11,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+  },
+  dropdownListContainer: {
+    position: 'absolute',
+    left: Spacing.sm,
+    right: Spacing.sm,
+    top: 40,
+    backgroundColor: Colors.white,
+    borderColor: Colors.gray300,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    zIndex: 10,
+    maxHeight: 160,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  dropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.gray100,
+  },
+  dropdownItemActive: {
+    backgroundColor: '#0066FF10',
+  },
+  dropdownItemText: {
+    fontSize: 12,
+    color: Colors.gray800,
+  },
+  dropdownItemTextActive: {
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 4,
+  },
+  weekdayText: {
+    fontSize: 10,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray500,
+    width: 28,
+    textAlign: 'center',
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+  },
+  dayCell: {
+    width: 28,
+    height: 28,
+    borderRadius: BorderRadius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 1,
+  },
+  dayCellSelected: {
+    backgroundColor: Colors.primary,
+  },
+  dayCellToday: {
+    backgroundColor: '#0066FF10',
+  },
+  dayText: {
+    fontSize: 11,
+    fontWeight: FontWeights.medium as any,
+    color: Colors.gray900,
+  },
+  dayTextMuted: {
+    color: Colors.gray300,
+  },
+  dayTextSelected: {
+    color: Colors.white,
+    fontWeight: '700',
+  },
+  dayTextToday: {
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  todayIndicatorDot: {
+    width: 3,
+    height: 3,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary,
+    position: 'absolute',
+    bottom: 2,
+  },
+  calendarBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BorderRadius.md,
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.sm,
+    marginTop: Spacing.sm,
+    borderWidth: 1,
+  },
+  calendarBannerActive: {
+    backgroundColor: '#0066FF05',
+    borderColor: '#0066FF20',
+  },
+  calendarBannerNeutral: {
+    backgroundColor: Colors.gray50,
+    borderColor: Colors.gray200,
+  },
+  bannerActiveText: {
+    fontSize: 12,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.gray900,
+  },
+  bannerNeutralText: {
+    fontSize: 11,
+    color: Colors.gray400,
+  },
+  ageBadge: {
+    backgroundColor: '#0066FF15',
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  ageBadgeText: {
+    fontSize: 10,
+    fontWeight: FontWeights.bold as any,
+    color: Colors.primary,
   },
 });
